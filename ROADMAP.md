@@ -318,6 +318,24 @@ work by area; this log is the plain-English change history.
   cursor as its move affordance; the selected artboard still shows resize
   cursors on its scale/rotate handles.
 
+### P21 — Pen tool (Bézier paths) ✅
+- New `PathElement` (`src/elements/PathElement.ts`): a cubic-Bézier path of
+  anchors (`PathAnchor` with absolute world `hIn`/`hOut` handles; `null` =
+  corner). Renders open polylines or closed shapes (stroke from `style`,
+  optional fill when `closed`), with bounds from all anchors+handles.
+  `hitTest` samples the curve (16 steps/segment) and uses a screen-constant
+  tolerance (`6 / scale`). `moveTo` shifts every stored coordinate so the path
+  is movable/transformable like other elements.
+- New `PenTool` (`src/tools/PenTool.ts`): click drops a corner anchor; click-
+  drag pulls out mirrored Bézier handles (out = cursor, in = mirror) for a
+  smooth point. Clicking the first anchor closes the path; **Enter** finishes
+  an open path; **Escape** cancels; switching tools also commits (or discards
+  if < 2 points). The path is added to the scene live and shows anchor squares
+  + handle arms + a dashed rubber-band to the cursor while drafting.
+- `ToolContext` gained an optional `onKeyDown` hook; `ToolManager.keyDown`
+  forwards it (with the last known world point), and `App` wires a `window`
+  keydown listener (ignored while typing in form fields).
+
 ---
 
 ## Known Limitations

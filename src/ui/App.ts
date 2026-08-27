@@ -7,6 +7,7 @@ import { ShapeTool } from "../tools/ShapeTool";
 import { TextTool } from "../tools/TextTool";
 import { ArtboardTool } from "../tools/ArtboardTool";
 import { PanTool } from "../tools/PanTool";
+import { PenTool } from "../tools/PenTool";
 import { ToolPalette } from "./ToolPalette";
 import { PropertiesPanel } from "./PropertiesPanel";
 import { LayerPanel } from "./LayerPanel";
@@ -65,6 +66,7 @@ export class App {
     this.tools.register(new TextTool());
     this.tools.register(new ArtboardTool());
     this.tools.register(new PanTool());
+    this.tools.register(new PenTool());
   }
 
   private bindCanvas(): void {
@@ -115,6 +117,15 @@ export class App {
       },
       { passive: false }
     );
+
+    // Keyboard: forward to the active tool (e.g. Pen tool Enter/Escape).
+    window.addEventListener("keydown", (e) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT")) {
+        return;
+      }
+      this.tools.keyDown(e.key);
+    });
   }
 
   private bindResize(): void {

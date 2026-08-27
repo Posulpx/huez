@@ -35,4 +35,5 @@ export interface Tool {
   onPointerDown(ctx: ToolContext): void;
   onPointerMove(ctx: ToolContext): void;
   onPointerUp(ctx: ToolContext): void;
+  onKeyDown?(ctx: ToolContext, key: string): void;
 }

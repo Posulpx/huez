@@ -15,6 +15,7 @@ import { ensureTool, setToolActive } from "./records";
 export class ToolManager {
   private active: Tool | null = null;
   private start: ToolContext["start"] = null;
+  private lastPoint: { x: number; y: number } = { x: 0, y: 0 };
   private tools = new Map<string, Tool>();
 
   constructor(
@@ -86,6 +87,7 @@ export class ToolManager {
   pointerDown(clientX: number, clientY: number, shiftKey: boolean, altKey = false): void {
     const point = this.renderer.toWorld(clientX, clientY);
     this.start = point;
+    this.lastPoint = point;
     const ctx = this.makeContext(point, shiftKey, altKey);
     const tool = this.active;
     if (tool) logApiCall(`${tool.id}.onPointerDown`);
@@ -94,16 +96,24 @@ export class ToolManager {
 
   pointerMove(clientX: number, clientY: number, shiftKey: boolean, altKey = false): void {
     const point = this.renderer.toWorld(clientX, clientY);
+    this.lastPoint = point;
     const ctx = this.makeContext(point, shiftKey, altKey);
     this.active?.onPointerMove(ctx);
   }
 
   pointerUp(clientX: number, clientY: number, shiftKey: boolean, altKey = false): void {
     const point = this.renderer.toWorld(clientX, clientY);
+    this.lastPoint = point;
     const ctx = this.makeContext(point, shiftKey, altKey);
     const tool = this.active;
     if (tool) logApiCall(`${tool.id}.onPointerUp`);
     tool?.onPointerUp(ctx);
     this.start = null;
+  }
+
+  /** Forward a keyboard event to the active tool (e.g. Pen tool finishing). */
+  keyDown(key: string): void {
+    const ctx = this.makeContext(this.lastPoint, false, false);
+    this.active?.onKeyDown?.(ctx, key);
   }
 }
