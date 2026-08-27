@@ -336,6 +336,16 @@ work by area; this log is the plain-English change history.
   forwards it (with the last known world point), and `App` wires a `window`
   keydown listener (ignored while typing in form fields).
 
+### P22 — Pen paths: fill-grab + ink-hugging bounds ✅
+- `PathElement.hitWorld` now also hits when the point lies inside a **closed**
+  path's filled area (ray-casting point-in-polygon on the sampled curve), so a
+  pen shape is draggable from anywhere on its fill, not only on the stroke.
+  Open paths still hit only the stroke (screen-constant `6 / scale` tolerance).
+- `PathElement.bounds` is now derived from the sampled curve (`flatten()`)
+  rather than the anchor + control-handle extremes, so the selection bounding
+  box hugs the actual ink. `moveTo` still shifts every stored coordinate, so
+  transform/move behave normally.
+
 ---
 
 ## Known Limitations

@@ -35,22 +35,20 @@ export class PathElement extends BaseElement {
   }
 
   get bounds(): Bounds {
+    // Hug the actual ink: bounds come from the sampled curve, not the control
+    // handles (which can extend well beyond the visible path).
+    const flat = this.flatten();
+    if (flat.length === 0) return { x: this.x, y: this.y, width: 0, height: 0 };
     let minX = Infinity;
     let minY = Infinity;
     let maxX = -Infinity;
     let maxY = -Infinity;
-    const acc = (px: number, py: number) => {
-      if (px < minX) minX = px;
-      if (py < minY) minY = py;
-      if (px > maxX) maxX = px;
-      if (py > maxY) maxY = py;
-    };
-    for (const p of this.points) {
-      acc(p.x, p.y);
-      if (p.hIn) acc(p.hIn.x, p.hIn.y);
-      if (p.hOut) acc(p.hOut.x, p.hOut.y);
+    for (const pt of flat) {
+      if (pt.x < minX) minX = pt.x;
+      if (pt.y < minY) minY = pt.y;
+      if (pt.x > maxX) maxX = pt.x;
+      if (pt.y > maxY) maxY = pt.y;
     }
-    if (!isFinite(minX)) return { x: this.x, y: this.y, width: 0, height: 0 };
     return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
   }
 
@@ -202,6 +200,8 @@ export class PathElement extends BaseElement {
     for (let i = 0; i < flat.length - 1; i++) {
       if (distToSegment(p, flat[i]!, flat[i + 1]!) <= tol) return true;
     }
+    // A closed path is also grabbable from anywhere inside its filled area.
+    if (this.closed && pointInPolygon(p, flat)) return true;
     return false;
   }
 
@@ -254,4 +254,17 @@ function distToSegment(p: Point, a: Point, b: Point): number {
   const cx = a.x + t * dx;
   const cy = a.y + t * dy;
   return Math.hypot(p.x - cx, p.y - cy);
+}
+
+/** Ray-casting point-in-polygon test. */
+function pointInPolygon(p: Point, poly: Point[]): boolean {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const a = poly[i]!;
+    const b = poly[j]!;
+    const intersect =
+      a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x;
+    if (intersect) inside = !inside;
+  }
+  return inside;
 }
