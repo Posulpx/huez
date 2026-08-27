@@ -1,0 +1,38 @@
+import type { Scene } from "../engine/Scene";
+import type { CanvasRenderer } from "../engine/CanvasRenderer";
+import type { Point } from "../engine/types";
+
+/**
+ * Shared context handed to every tool on each pointer event.
+ */
+export interface ToolContext {
+  scene: Scene;
+  renderer: CanvasRenderer;
+  /** World-space point for the current event. */
+  point: Point;
+  /** Original point where the current drag started (if any). */
+  start: Point | null;
+  shiftKey: boolean;
+  /** Alt/Option held — used for center-pivot transforms. */
+  altKey: boolean;
+  /** Request a repaint — tools call this after mutating the scene. */
+  requestRender(): void;
+  /** Update the canvas cursor (used for hover/transform affordances). */
+  setCursor(cursor: string): void;
+}
+
+/**
+ * A tool reacts to pointer interaction and drives the scene. Tools never
+ * touch the DOM directly; they communicate through ToolContext.
+ */
+export interface Tool {
+  readonly id: string;
+  readonly label: string;
+  readonly icon: string;
+  readonly cursor: string;
+  onActivate?(ctx: ToolContext): void;
+  onDeactivate?(ctx: ToolContext): void;
+  onPointerDown(ctx: ToolContext): void;
+  onPointerMove(ctx: ToolContext): void;
+  onPointerUp(ctx: ToolContext): void;
+}

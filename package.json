@@ -1,0 +1,21 @@
+{
+  "name": "huez",
+  "version": "0.1.0",
+  "description": "HueZ — modular, open-source Canvas API tool modules (text, dynamic shapes, fills, strokes, drop shadows, and more).",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Posulpx/huez.git"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3",
+    "vite": "^6.0.0"
+  }
+}
