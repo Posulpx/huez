@@ -16,6 +16,9 @@ export class CanvasRenderer {
   offsetX = 0;
   offsetY = 0;
 
+  /** Rubber-band (marquee) selection rectangle in world space, or null. */
+  private marquee: { x0: number; y0: number; x1: number; y1: number } | null = null;
+
   private static readonly MIN_SCALE = 0.1;
   private static readonly MAX_SCALE = 8;
 
@@ -82,42 +85,162 @@ export class CanvasRenderer {
     // Clear the full backing store (identity transform) before applying view.
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    // Opaque base so the grid is drawn on a clean field (no stage pattern).
+    ctx.fillStyle = "#0f1115";
+    ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
     ctx.setTransform(dpr * this.scale, 0, 0, dpr * this.scale, dpr * this.offsetX, dpr * this.offsetY);
 
-    // 1) Artboards render first as backgrounds (in their own z-order).
-    for (const el of scene.artboards) el.draw(ctx);
+    // 0) Faint grid texture, behind everything, in world space (pans/zooms).
+    this.drawGrid();
 
-    // 2) Everything else, clipped to its assigned artboard if any.
+    // 1) Each artboard renders as a single z-unit with its children, in
+    //    scene (layer) order. Grouping the children with their board means
+    //    reordering an artboard in the layers panel moves its whole stack
+    //    (background + contents) as one, and an upper artboard fully covers a
+    //    lower one including the lower one's children.
+    const childrenOf = new Map<string, BaseElement[]>();
     for (const el of scene.all) {
       if (el instanceof ArtboardElement) continue;
-
-      const artboard = el.artboardId
-        ? (scene.getElementById(el.artboardId) as ArtboardElement | undefined)
-        : undefined;
-
-      if (artboard instanceof ArtboardElement) {
-        ctx.save();
-        ctx.beginPath();
-        const ax = Math.min(artboard.x, artboard.x + artboard.width);
-        const ay = Math.min(artboard.y, artboard.y + artboard.height);
-        ctx.rect(ax, ay, Math.abs(artboard.width), Math.abs(artboard.height));
-        ctx.clip();
-        el.draw(ctx);
-        ctx.restore();
-      } else {
-        el.draw(ctx);
+      if (el.artboardId && scene.getElementById(el.artboardId) instanceof ArtboardElement) {
+        if (!childrenOf.has(el.artboardId)) childrenOf.set(el.artboardId, []);
+        childrenOf.get(el.artboardId)!.push(el);
       }
     }
 
-    // 3) Selection overlays are never clipped — bounds/handles stay visible.
+    for (const ab of scene.artboards) {
+      if (!ab.visible) continue;
+      ab.draw(ctx);
+      const kids = childrenOf.get(ab.id);
+      if (kids && kids.length) {
+        ctx.save();
+        ctx.beginPath();
+        const ax = Math.min(ab.x, ab.x + ab.width);
+        const ay = Math.min(ab.y, ab.y + ab.height);
+        ctx.rect(ax, ay, Math.abs(ab.width), Math.abs(ab.height));
+        ctx.clip();
+        for (const child of kids) {
+          if (child.visible) child.draw(ctx);
+        }
+        ctx.restore();
+      }
+    }
+
+    // 2) Free elements (not assigned to any artboard) always render on top of
+    //    every artboard unit, in scene order. Stale/orphan assignments also go
+    //    here so they stay visible.
+    for (const el of scene.all) {
+      if (el instanceof ArtboardElement) continue;
+      if (el.artboardId && scene.getElementById(el.artboardId) instanceof ArtboardElement) continue;
+      if (el.visible) el.draw(ctx);
+    }
+
+    // Selection overlays are never clipped — bounds/handles stay visible.
     this.drawSelectionOverlay(scene);
+
+    // Rubber-band (marquee) selection rectangle, drawn above everything.
+    if (this.marquee) this.drawMarquee();
+  }
+
+  /** Sets the rubber-band selection rectangle (world space) or null to clear. */
+  setMarquee(rect: { x0: number; y0: number; x1: number; y1: number } | null): void {
+    this.marquee = rect;
+  }
+
+  private drawMarquee(): void {
+    const { ctx } = this;
+    const m = this.marquee!;
+    const x = Math.min(m.x0, m.x1);
+    const y = Math.min(m.y0, m.y1);
+    const w = Math.abs(m.x1 - m.x0);
+    const h = Math.abs(m.y1 - m.y0);
+    ctx.save();
+    ctx.fillStyle = "rgba(79, 140, 255, 0.12)";
+    ctx.fillRect(x, y, w, h);
+    ctx.lineWidth = 1 / this.scale;
+    ctx.strokeStyle = "#4f8cff";
+    ctx.setLineDash([4 / this.scale, 4 / this.scale]);
+    ctx.strokeRect(x, y, w, h);
+    ctx.restore();
+  }
+
+  /** Draws a faint coordinate grid across the visible world area. The grid
+   *  lives in world space so it pans and zooms with the canvas, and its step
+   *  adapts to keep an even on-screen density. */
+  private drawGrid(): void {
+    const { ctx, dpr } = this;
+    const cssW = this.canvas.width / dpr;
+    const cssH = this.canvas.height / dpr;
+    const left = -this.offsetX / this.scale;
+    const top = -this.offsetY / this.scale;
+    const right = (cssW - this.offsetX) / this.scale;
+    const bottom = (cssH - this.offsetY) / this.scale;
+
+    // Pick a world step whose on-screen size stays in a comfortable range.
+    let step = 24;
+    while (step * this.scale < 12) step *= 2;
+    while (step * this.scale > 64) step /= 2;
+
+    const major = step * 5;
+    ctx.lineWidth = 1 / this.scale; // ≈ 1 CSS px
+
+    // Minor lines.
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.045)";
+    ctx.beginPath();
+    for (let x = Math.floor(left / step) * step; x <= right; x += step) {
+      if (Math.abs(x % major) < 1e-6) continue;
+      ctx.moveTo(x, top);
+      ctx.lineTo(x, bottom);
+    }
+    for (let y = Math.floor(top / step) * step; y <= bottom; y += step) {
+      if (Math.abs(y % major) < 1e-6) continue;
+      ctx.moveTo(left, y);
+      ctx.lineTo(right, y);
+    }
+    ctx.stroke();
+
+    // Major lines (every 5th), slightly stronger.
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.09)";
+    ctx.beginPath();
+    for (let x = Math.floor(left / major) * major; x <= right; x += major) {
+      ctx.moveTo(x, top);
+      ctx.lineTo(x, bottom);
+    }
+    for (let y = Math.floor(top / major) * major; y <= bottom; y += major) {
+      ctx.moveTo(left, y);
+      ctx.lineTo(right, y);
+    }
+    ctx.stroke();
   }
 
   private drawSelectionOverlay(scene: Scene): void {
     const { ctx } = this;
     ctx.save();
     for (const el of scene.selected) {
+      if (!el.visible) continue;
       const b = el.bounds;
+
+      // Selected artboards get an orange label highlight so the move handle is
+      // unmistakable. Replicates the element's own transform to line up.
+      if (el instanceof ArtboardElement) {
+        const cx = b.x + b.width / 2;
+        const cy = b.y + b.height / 2;
+        ctx.save();
+        ctx.translate(cx, cy);
+        if (el.rotation) ctx.rotate(el.rotation);
+        ctx.translate(-cx, -cy);
+        ctx.translate(b.x, b.y);
+        const w = el.width;
+        const x0 = Math.min(0, w) - 2;
+        const x1 = Math.max(0, w) + 2;
+        const labelH = 18;
+        ctx.fillStyle = "rgba(255, 140, 0, 0.18)";
+        ctx.fillRect(x0, -labelH, x1 - x0, labelH);
+        ctx.fillStyle = "#ff8c00";
+        ctx.font = "12px system-ui, sans-serif";
+        ctx.textBaseline = "bottom";
+        ctx.fillText(el.name, 2, -4);
+        ctx.restore();
+      }
 
       // Rotated bounding outline.
       const corners = [

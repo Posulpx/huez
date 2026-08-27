@@ -358,7 +358,6 @@ export class PropertiesPanel {
       "w", "center", "e",
       "sw", "s", "se"
     ];
-    const artboard = el.artboardId ? this.scene.getElementById(el.artboardId) ?? null : null;
 
     for (const point of order) {
       const btn = document.createElement("button");
@@ -369,7 +368,7 @@ export class PropertiesPanel {
       btn.textContent = "•";
       btn.dataset.anchor = point;
       btn.addEventListener("click", () => {
-        setElementAnchor(el, artboard, point);
+        setElementAnchor(el, point);
         this.requestRender();
         this.render();
       });

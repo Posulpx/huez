@@ -51,19 +51,71 @@ export class ArtboardElement extends BaseElement {
     ctx.fillText(this.name, 2, -4);
   }
 
-  protected hitTestLocal(p: Point): boolean {
-    // Width/height may be negative (flipped); normalize the box.
+  protected hitTestLocal(p: Point, scale?: number): boolean {
+    // Only the label band and the border edges are interactive — the interior
+    // is intentionally NOT a hit target, so dragging empty artboard space
+    // never moves the board (children are hit-tested first anyway).
+    return this.hitLabel(p, scale) || this.hitEdge(p, scale);
+  }
+
+  /** Factor that inflates handle hit areas as the viewport zooms out, so the
+   *  label band and edges stay a roughly constant size on screen. At zoom ≥ 1
+   *  (or unknown scale) it's 1 (no inflation). */
+  private handleScale(scale: number | undefined): number {
+    if (!scale || scale <= 0) return 1;
+    return Math.max(1, 1 / scale);
+  }
+
+  /** True if a WORLD-space point lands on this artboard's border edge (a thin
+   *  strip around the frame, inside or just outside it). Evaluated in the
+   *  artboard's rotated local frame. The label band is handled separately. */
+  hitEdge(p: Point, scale?: number): boolean {
     const w = this.width;
     const h = this.height;
+    const cx = this.x + w / 2;
+    const cy = this.y + h / 2;
+    const c = Math.cos(-this.rotation);
+    const s = Math.sin(-this.rotation);
+    const dx = p.x - cx;
+    const dy = p.y - cy;
+    const lx = dx * c - dy * s;
+    const ly = dx * s + dy * c;
+    const localX = lx + w / 2;
+    const localY = ly + h / 2;
     const x0 = Math.min(0, w);
     const x1 = Math.max(0, w);
     const y0 = Math.min(0, h);
     const y1 = Math.max(0, h);
-    if (p.x >= x0 && p.y >= y0 && p.x <= x1 && p.y <= y1) return true;
-    // The label band above the frame is a select/move handle too.
-    const labelH = 18;
-    if (p.y >= -labelH && p.y <= 0 && p.x >= x0 - 2 && p.x <= x1 + 2) return true;
-    return false;
+    const EDGE = 6 * this.handleScale(scale);
+    if (localX < x0 - EDGE || localX > x1 + EDGE) return false;
+    if (localY < y0 - EDGE || localY > y1 + EDGE) return false;
+    const nearX = localX <= x0 + EDGE || localX >= x1 - EDGE;
+    const nearY = localY <= y0 + EDGE || localY >= y1 - EDGE;
+    return nearX || nearY;
+  }
+
+  /** True if a WORLD-space point lands on this artboard's label band (the
+   *  strip rendered just above the frame). Tested in the artboard's rotated
+   *  local frame so it stays accurate under rotation. Clicking the label is
+   *  always prioritised over child elements. */
+  hitLabel(p: Point, scale?: number): boolean {
+    const w = this.width;
+    const h = this.height;
+    const cx = this.x + w / 2;
+    const cy = this.y + h / 2;
+    const c = Math.cos(-this.rotation);
+    const s = Math.sin(-this.rotation);
+    const dx = p.x - cx;
+    const dy = p.y - cy;
+    const lx = dx * c - dy * s;
+    const ly = dx * s + dy * c;
+    const localX = lx + w / 2;
+    const localY = ly + h / 2;
+    const f = this.handleScale(scale);
+    const x0 = Math.min(0, w) - 2 * f;
+    const x1 = Math.max(0, w) + 2 * f;
+    const labelH = 18 * f;
+    return localX >= x0 && localX <= x1 && localY >= -labelH && localY <= 0;
   }
 
   protected cloneSelf(): ArtboardElement {

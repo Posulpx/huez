@@ -1,4 +1,5 @@
 import { Scene } from "../engine/Scene";
+import { ArtboardElement } from "../elements/ArtboardElement";
 import { CanvasRenderer } from "../engine/CanvasRenderer";
 import { ToolManager } from "../tools/ToolManager";
 import { SelectTool } from "../tools/SelectTool";
@@ -34,6 +35,12 @@ export class App {
     this.tools = new ToolManager(this.scene, this.renderer, () => this.render());
 
     this.registerTools();
+
+    // Seed an A4-sized artboard (794×1123 px ≈ 210×297 mm @ 96 DPI) as the
+    // initial canvas, numbered "Artboard 1".
+    const a4 = new ArtboardElement(120, 120, 794, 1123);
+    a4.name = "Artboard 1";
+    this.scene.add(a4);
 
     new ToolPalette(paletteRoot, this.tools.list(), (id) => {
       this.tools.setActive(id);

@@ -17,6 +17,8 @@ export class ArtboardTool implements Tool {
 
   onPointerDown(ctx: ToolContext): void {
     const el = new ArtboardElement(ctx.point.x, ctx.point.y, 0, 0);
+    // Number additional artboards: "Artboard 2", "Artboard 3", …
+    el.name = `Artboard ${ctx.scene.artboards.length + 1}`;
     this.draft = el;
     ctx.scene.add(el);
     ctx.scene.select(el);

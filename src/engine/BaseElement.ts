@@ -71,8 +71,10 @@ export abstract class BaseElement {
     ctx.shadowOffsetY = shadow.offsetY;
   }
 
-  /** Hit-test a world-space point against this element. */
-  hitTest(p: Point): boolean {
+  /** Hit-test a world-space point against this element. `scale` is the current
+   *  viewport zoom; subclasses (e.g. artboards) use it to keep handle hit
+   *  areas a constant size on screen when zoomed out. */
+  hitTest(p: Point, scale = 1): boolean {
     const b = this.bounds;
     const cx = b.x + b.width / 2;
     const cy = b.y + b.height / 2;
@@ -89,10 +91,10 @@ export abstract class BaseElement {
     }
     const lx = dx + b.width / 2;
     const ly = dy + b.height / 2;
-    return this.hitTestLocal({ x: lx, y: ly });
+    return this.hitTestLocal({ x: lx, y: ly }, scale);
   }
 
-  protected abstract hitTestLocal(p: Point): boolean;
+  protected abstract hitTestLocal(p: Point, scale?: number): boolean;
 
   /** Move the element so its top-left lands at the given world point. */
   moveTo(x: number, y: number): void {

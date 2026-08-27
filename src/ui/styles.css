@@ -272,6 +272,18 @@ body {
   background: #243049;
 }
 
+.layer-row.child {
+  margin-left: 14px;
+  padding-left: 16px;
+  border-left: 2px solid var(--accent);
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.layer-row.is-artboard {
+  font-weight: 600;
+}
+
 .layer-name {
   flex: 1;
   min-width: 0;

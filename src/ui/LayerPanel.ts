@@ -1,5 +1,6 @@
 import type { Scene } from "../engine/Scene";
 import type { BaseElement } from "../engine/BaseElement";
+import { ArtboardElement } from "../elements/ArtboardElement";
 
 /**
  * Layers panel: lists every element in z-order (top = front), with
@@ -30,7 +31,7 @@ export class LayerPanel {
 
   private signature(): string {
     const parts = this.scene.layers.map(
-      (e) => `${e.id}:${e.visible ? 1 : 0}:${e.locked ? 1 : 0}`
+      (e) => `${e.id}:${e.visible ? 1 : 0}:${e.locked ? 1 : 0}:${e.artboardId ?? ""}`
     );
     const sel = [...this.scene.selected].map((e) => e.id).join(",");
     return parts.join("|") + "#" + sel;
@@ -56,17 +57,39 @@ export class LayerPanel {
     list.className = "layer-list";
     this.root.appendChild(list);
 
-    // Front-most layer first (top of the list).
+    // Group children under their artboard for display. Keys are artboard
+    // ids; values are the child elements (in scene order).
+    const childrenOf = new Map<string, BaseElement[]>();
+    const childIds = new Set<string>();
+    for (const el of this.scene.all) {
+      if (el.artboardId && this.scene.getElementById(el.artboardId)) {
+        if (!childrenOf.has(el.artboardId)) childrenOf.set(el.artboardId, []);
+        childrenOf.get(el.artboardId)!.push(el);
+        childIds.add(el.id);
+      }
+    }
+
+    // Front-most layer first (top of the list). Children are indented under
+    // their artboard.
     const layers = [...this.scene.layers].reverse();
     for (const el of layers) {
-      list.appendChild(this.row(el));
+      if (childIds.has(el.id)) continue; // rendered under its artboard
+      if (el instanceof ArtboardElement) {
+        list.appendChild(this.row(el, 0));
+        for (const k of [...(childrenOf.get(el.id) ?? [])].reverse()) {
+          list.appendChild(this.row(k, 1));
+        }
+      } else {
+        list.appendChild(this.row(el, 0));
+      }
     }
   }
 
-  private row(el: BaseElement): HTMLElement {
+  private row(el: BaseElement, depth = 0): HTMLElement {
     const row = document.createElement("div");
-    row.className = "layer-row";
+    row.className = "layer-row" + (depth > 0 ? " child" : "");
     row.draggable = true;
+    if (el instanceof ArtboardElement) row.classList.add("is-artboard");
     if (this.scene.isSelected(el)) row.classList.add("active");
 
     row.addEventListener("click", (e) => {

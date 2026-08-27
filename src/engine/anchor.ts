@@ -75,26 +75,12 @@ export function relayoutChildrenForArtboard(
 }
 
 /**
- * Change an element's anchor, keeping it visually in place by preserving its
- * offset from the artboard's anchor point. When `artboard` is null the anchor
- * is just recorded (it only takes effect once assigned to an artboard).
+ * Change an element's anchor. This does NOT move the element — it only changes
+ * which reference point is used to track the artboard during later resizes
+ * ("pins it down"). The offset is recomputed live by `relayoutChildrenForArtboard`
+ * from the element's current position, so picking a new anchor is a no-op for
+ * placement.
  */
-export function setElementAnchor(
-  el: BaseElement,
-  artboard: BaseElement | null,
-  newAnchor: AnchorPoint
-): void {
-  if (!artboard) {
-    el.anchor = newAnchor;
-    return;
-  }
-  const ab = rectOf(artboard);
-  const oldChild = rectOf(el);
-  const ea = anchorWorld(oldChild, el.anchor);
-  const aaOld = anchorWorld(ab, el.anchor);
-  const ox = ea.x - aaOld.x;
-  const oy = ea.y - aaOld.y;
+export function setElementAnchor(el: BaseElement, newAnchor: AnchorPoint): void {
   el.anchor = newAnchor;
-  const aaNew = anchorWorld(ab, newAnchor);
-  setElementAnchorWorld(el, newAnchor, { x: aaNew.x + ox, y: aaNew.y + oy });
 }
