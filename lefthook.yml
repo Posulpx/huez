@@ -19,3 +19,5 @@ pre-push:
       run: npx tsc --noEmit
     fmt-check:
       run: npx prettier --check .
+    check-roadmap:
+      run: npx zx scripts/check-roadmap.mjs

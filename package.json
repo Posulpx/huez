@@ -15,8 +15,12 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "check": "zx scripts/check.mjs",
+    "check:roadmap": "zx scripts/check-roadmap.mjs",
     "fmt": "zx scripts/fmt.mjs",
     "fmt:check": "zx scripts/fmt.mjs --check",
+    "release:patch": "zx scripts/bump.mjs patch",
+    "release:minor": "zx scripts/bump.mjs minor",
+    "release:major": "zx scripts/bump.mjs major",
     "prepare": "lefthook install"
   },
   "prettier": {

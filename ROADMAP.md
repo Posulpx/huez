@@ -9,6 +9,30 @@ and panels — built so tools can be authored, registered, and hot-swapped.
 
 ---
 
+## Release Habit — Update ROADMAP on Every Patch / Minor / Major
+
+> **Rule: no version bump ships without a ROADMAP update.** Every `patch` (fix), `minor` (feat), and `major` (breaking) milestone must append a Progress Log entry and, when it closes a milestone, flip that milestone to ✅.
+
+**Habit loop (enforced):**
+
+1. Bump version via `zx` (`npm run release:patch|minor|major` → `scripts/bump.mjs`) — never hand-edit `package.json` version.
+2. The bump script creates the `### P<N> — <title> ✅` entry and updates `## Milestones` / version badge.
+3. `lefthook` **pre-push** runs `zx scripts/check-roadmap.mjs` — if `package.json` version changed in the pushed commits but `ROADMAP.md` wasn't touched, the push is blocked with a fix hint.
+4. `npm run check:roadmap` can be run locally at any time (CI runs it too).
+
+**Commit convention (commitlint):** `fix:` → patch, `feat:` → minor, `BREAKING CHANGE:` or `feat!:`/`fix!:` → major. The bump script infers the level but you can override.
+
+**Checklist for every release:**
+
+- [ ] `package.json` version bumped (via `scripts/bump.mjs`)
+- [ ] `ROADMAP.md` → new `P<N>` entry with scope, files, and verification (`tsc`, `vite build`, manual)
+- [ ] `ROADMAP.md` → Milestones updated if a milestone closed
+- [ ] `CHANGELOG` line added if `P<N>` is user-visible (optional, same commit)
+
+See `scripts/bump.mjs` and `scripts/check-roadmap.mjs` for the automation.
+
+---
+
 ## Status Legend
 - ✅ Done
 - 🚧 In progress
@@ -91,6 +115,9 @@ and panels — built so tools can be authored, registered, and hot-swapped.
 - `PropertiesPanel` shows a 3×3 anchor picker when the element is assigned to an
   artboard; selecting a point re-anchors immediately. CSS in `styles.css`.
 - `anchor` is cloned with the element.
+
+### M7 — Tooling parity (ZX) + artboard-confined selection ✅
+- `P23` — ZX parity: `zx` scripts, `prettier` parity, `lefthook`, `commitlint`; `P24` — selection confined to artboard origin (no cross-artboard Shift/marquee); `P25` — release habit automation (`scripts/bump.mjs`, `scripts/check-roadmap.mjs`, pre-push gate).
 
 ---
 
@@ -345,6 +372,28 @@ work by area; this log is the plain-English change history.
   rather than the anchor + control-handle extremes, so the selection bounding
   box hugs the actual ink. `moveTo` still shifts every stored coordinate, so
   transform/move behave normally.
+
+### P23 — Google ZX guidelines parity ✅
+- `chore: impose google/zx guidelines — zx scripts, prettier parity, lefthook, commitlint` (`6567bd0`).
+- Stack now mirrors [`google/zx`](https://github.com/google/zx): `zx@^8.8.5`,
+  `prettier@3.9.1` (`semi:false, singleQuote:true, endOfLine:lf, trailingComma:es5`),
+  `lefthook@^2.1.9`, `@commitlint/*@^21.1.0`.
+- `package.json` (`type:module`, `prettier` field, `scripts: dev/build/check/fmt/fmt:check/prepare`),
+  `tsconfig.json` (`resolveJsonModule`, `include: scripts`), `.prettierignore`,
+  `.gitignore` (`build/coverage`), `lefthook.yml` (pre-commit `prettier --write`, commit-msg `commitlint`, pre-push `typecheck+fmt-check`), `.commitlintrc` (conventional).
+- `scripts/` — `build.mjs`, `check.mjs`, `fmt.mjs`, `dev.mjs` as `#!/usr/bin/env zx` with `usePowerShell/useBash` win32 fallback (fixes `No quote function` when `bash` not in PATH on Windows).
+- Formatted entire `src/` (30 files) to new prettier style; verified `tsc --noEmit`, `prettier --check`, `vite build`.
+
+### P24 — Artboard-confined selection ✅
+- `feat: confine selection to artboard origin — cross-artboard select blocked` (`e0e3e1c`) — closes the "select leaks across artboards" gap.
+- `tools/SelectTool.ts`: `selectionScopeId(scene): string|null|undefined` (first selected's `artboardId`; `null` = free), `marqueeOriginId(ctx)` (base selection's scope or `artboardAtPoint(m.x0,m.y0)?.id ?? null`).
+- `onPointerDown`: `Shift`-add is gated — if `origin !== undefined && target.artboardId !== origin` the foreign item is ignored (plain click replaces origin, always allowed).
+- `updateMarqueeSelection`: `originId = marqueeOriginId(ctx)`, `insideArtboard = originId !== null`; artboards only when free, non-artboard items require `el.artboardId === originId`; bounds-intersect test unchanged; additive base kept. Effect: marquee inside `A` never pulls `B`/free, free marquee never pulls bound content, additive marquee from `A` inside `B` adds nothing.
+- Verified with `npx tsx` harness (7 cases: shift-click blocked/allowed, plain replace, marquee A/free/additive), `tsc --noEmit`, `vite build`.
+
+### P25 — Roadmap habit: every patch/minor/major updates ROADMAP ✅
+- This entry. Establishes the habit: no `patch`/`minor`/`major` ships without a `ROADMAP.md` update (see "Release Habit" above).
+- Automation: `scripts/bump.mjs` (version bump + ROADMAP stub), `scripts/check-roadmap.mjs` (CI + pre-push gate), `lefthook.yml` `check-roadmap` hook, `package.json` `release:*` + `check:roadmap` scripts.
 
 ---
 
