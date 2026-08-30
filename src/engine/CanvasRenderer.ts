@@ -343,6 +343,12 @@ export class CanvasRenderer {
     }
   }
 
+  /** Convert a DOM event point to screen (CSS) coordinates relative to the canvas. */
+  toScreen(clientX: number, clientY: number): { x: number; y: number } {
+    const rect = this.canvas.getBoundingClientRect()
+    return { x: clientX - rect.left, y: clientY - rect.top }
+  }
+
   /** Expose the context for tools that need direct drawing (rare). */
   get context(): CanvasRenderingContext2D {
     return this.ctx

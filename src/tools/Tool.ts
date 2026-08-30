@@ -10,6 +10,8 @@ export interface ToolContext {
   renderer: CanvasRenderer
   /** World-space point for the current event. */
   point: Point
+  /** Screen-space point (CSS pixels relative to the canvas) for the current event. */
+  screenPoint: Point
   /** Original point where the current drag started (if any). */
   start: Point | null
   shiftKey: boolean

@@ -4,6 +4,7 @@ import type { Point } from '../engine/types'
 import {
   hitHandle,
   worldPointRect,
+  localPointRect,
   handleEdges,
   type HandleId,
   type Rect,
@@ -11,6 +12,7 @@ import {
 import { ShapeElement } from '../elements/ShapeElement'
 import { ArtboardElement } from '../elements/ArtboardElement'
 import { TextElement } from '../elements/TextElement'
+import { PathElement } from '../elements/PathElement'
 import { relayoutChildrenForArtboard } from '../engine/anchor'
 import { logApiCall } from './log'
 
@@ -19,6 +21,12 @@ interface TransformState {
   handle: HandleId
   start: Rect & { fontSize: number }
   startAngle: number
+  pathSnapshot?: {
+    x: number
+    y: number
+    hIn: { x: number; y: number } | null
+    hOut: { x: number; y: number } | null
+  }[]
 }
 
 /**
@@ -79,6 +87,8 @@ export class SelectTool implements Tool {
     if (selected.length === 1 && !selected[0]!.locked) {
       const hit = hitHandle(selected[0]!, ctx.point)
       if (hit) {
+        // Artboards cannot be rotated — ignore the rotate handle.
+        if (hit === 'rotate' && selected[0] instanceof ArtboardElement) return
         this.beginTransform(ctx, selected[0]!, hit)
         return
       }
@@ -243,6 +253,8 @@ export class SelectTool implements Tool {
     el: BaseElement,
     handle: HandleId
   ): void {
+    // Artboards are axis-aligned — no rotation handle.
+    if (handle === 'rotate' && el instanceof ArtboardElement) return
     const b = el.bounds
     const start: Rect & { fontSize: number } = {
       x: b.x,
@@ -258,11 +270,21 @@ export class SelectTool implements Tool {
       const cy = b.y + b.height / 2
       startAngle = Math.atan2(ctx.point.y - cy, ctx.point.x - cx)
     }
+    const pathSnapshot =
+      el instanceof PathElement
+        ? el.points.map((p) => ({
+            x: p.x,
+            y: p.y,
+            hIn: p.hIn ? { x: p.hIn.x, y: p.hIn.y } : null,
+            hOut: p.hOut ? { x: p.hOut.x, y: p.hOut.y } : null,
+          }))
+        : undefined
     this.transform = {
       mode: handle === 'rotate' ? 'rotate' : 'scale',
       handle,
       start,
       startAngle,
+      pathSnapshot,
     }
     logApiCall(`select.${handle === 'rotate' ? 'rotate' : 'scale'}`, handle)
     ctx.requestRender()
@@ -336,6 +358,8 @@ export class SelectTool implements Tool {
       : null
 
     if (t.mode === 'rotate') {
+      // Artboards cannot be rotated.
+      if (el instanceof ArtboardElement) return
       const cx = t.start.x + t.start.w / 2
       const cy = t.start.y + t.start.h / 2
       const angle = Math.atan2(ctx.point.y - cy, ctx.point.x - cx)
@@ -443,6 +467,56 @@ export class SelectTool implements Tool {
     } else if (el instanceof TextElement) {
       const factor = useNh / t.start.h
       el.fontSize = Math.max(4, t.start.fontSize * factor)
+    } else if (el instanceof PathElement) {
+      // Scale every anchor and its handles from the snapshot bounds to new
+      // bounds in the element's rotated local frame — using the snapshot avoids
+      // compounding (non-linear) drift when the handle is dragged continuously.
+      const oldRect = t.start
+      const newRect: Rect = {
+        x: nx,
+        y: ny,
+        w: useNw,
+        h: useNh,
+        rotation: el.rotation,
+      }
+      const w0 = oldRect.w
+      const h0 = oldRect.h
+      const sx = w0 === 0 ? 1 : useNw / w0
+      const sy = h0 === 0 ? 1 : useNh / h0
+      const snap =
+        t.pathSnapshot ??
+        el.points.map((p) => ({
+          x: p.x,
+          y: p.y,
+          hIn: p.hIn ? { ...p.hIn } : null,
+          hOut: p.hOut ? { ...p.hOut } : null,
+        }))
+      for (let i = 0; i < el.points.length; i++) {
+        const a = el.points[i]!
+        const s = snap[i]!
+        const lp = localPointRect(oldRect, { x: s.x, y: s.y })
+        const wp = worldPointRect(newRect, lp.x * sx, lp.y * sy)
+        a.x = wp.x
+        a.y = wp.y
+        if (s.hIn) {
+          const lpi = localPointRect(oldRect, s.hIn)
+          const wpi = worldPointRect(newRect, lpi.x * sx, lpi.y * sy)
+          if (!a.hIn) a.hIn = { x: wpi.x, y: wpi.y }
+          else {
+            a.hIn.x = wpi.x
+            a.hIn.y = wpi.y
+          }
+        } else a.hIn = null
+        if (s.hOut) {
+          const lpo = localPointRect(oldRect, s.hOut)
+          const wpo = worldPointRect(newRect, lpo.x * sx, lpo.y * sy)
+          if (!a.hOut) a.hOut = { x: wpo.x, y: wpo.y }
+          else {
+            a.hOut.x = wpo.x
+            a.hOut.y = wpo.y
+          }
+        } else a.hOut = null
+      }
     }
     if (isArtboard && oldArt) relayoutChildrenForArtboard(ctx.scene, el, oldArt)
     ctx.requestRender()
@@ -466,7 +540,9 @@ export class SelectTool implements Tool {
       ctx.setCursor('default')
       return
     }
-    const hid = hitHandle(selected[0]!, ctx.point)
+    let hid = hitHandle(selected[0]!, ctx.point)
+    // Artboards have no rotate handle — treat it as no hit.
+    if (hid === 'rotate' && selected[0] instanceof ArtboardElement) hid = null
     if (!hid) {
       ctx.setCursor('move')
       return

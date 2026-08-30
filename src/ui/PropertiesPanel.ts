@@ -108,12 +108,14 @@ export class PropertiesPanel {
       })
     )
 
-    this.root.appendChild(
-      this.rangeRow('Rotation', 0, Math.PI * 2, 0.01, el.rotation, (v) => {
-        el.rotation = v
-        this.requestRender()
-      })
-    )
+    if (!(el instanceof ArtboardElement)) {
+      this.root.appendChild(
+        this.rangeRow('Rotation', 0, Math.PI * 2, 0.01, el.rotation, (v) => {
+          el.rotation = v
+          this.requestRender()
+        })
+      )
+    }
 
     this.root.appendChild(this.sectionTitle('Drop Shadow'))
 

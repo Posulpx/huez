@@ -407,6 +407,12 @@ work by area; this log is the plain-English change history.
 - `src/ui/styles.css:65` — `.tool-group`, `.tool-group-header/count/arrow`, `.tool-group-body` (hidden when `.collapsed`), `.tool-group-empty`.
 - `src/ui/App.ts:22` wiring unchanged — `registerTools()` then `new ToolPalette(paletteRoot, this.tools.list(), ...)` — grouping now derived from `Tool.category` not id heuristics.
 - Verified `npx tsc --noEmit`, `npx prettier --check`, `npx zx scripts/check.mjs`, `npx zx scripts/build.mjs` (53.9 kB).
+### P27 — Fix Pan glitch + prevent artboard rotation + allow Path scaling ✅
+- `patch` bump `0.2.0 → 0.2.1` via `scripts/bump.mjs patch` (2026-08-30).
+- **Pan glitch:** `PanTool` used world delta (`ctx.point.x - last.x` via `toWorld`) then `renderer.panWorld(dx*scale)`. Since `toWorld` depends on `offset` that `panWorld` just mutated, second `pointermove` computed `(sx2 - offset1)/scale - (sx1 - offset0)/scale` → `(sx2 -2*sx1+sx0)/scale`, so pan stalled at 10px then jittered (repro: scale 2, 100→110→120 gave 10,10 then stuck). Fix: `src/tools/Tool.ts:14` `ToolContext.screenPoint`, `src/engine/CanvasRenderer.ts:48` `toScreen()`, `src/tools/ToolManager.ts:20` tracks `lastScreen` + `makeContext(point,screenPoint)`, `src/tools/PanTool.ts:1` now stores `screenPoint` + `renderer.pan(dx,dy)`, cursor `grab`/`grabbing`.
+- **Artboard rotation locked:** artboards are axis-aligned workspaces — `src/tools/SelectTool.ts:42` `beginTransform`/`onPointerDown` early-return for `rotate` on `ArtboardElement`, `updateTransform:60` guard, `updateHoverCursor:68` hides rotate handle, `src/ui/PropertiesPanel.ts:56` rotation slider hidden for artboards.
+- **Path scaling:** pen paths were not scalable — `src/tools/SelectTool.ts:68` `updateTransform` now handles `PathElement` via `localPointRect`/`worldPointRect` scaling of every anchor `x/y` + `hIn`/`hOut` from `oldRect` (`t.start`) to `newRect` (`nx,ny,useNw,useNh`) with `sx=useNw/w0`, `sy=useNh/h0`; `src/tools/SelectTool.ts:1` imports `localPointRect`. Non-linear fix: `TransformState.pathSnapshot` captures anchors at `beginTransform` and `updateTransform` scales from snapshot (not live `el.points`) to avoid compounding drift (east drag 10→50px now linear: 118→158 vs before 118→358).
+- Verified `npx tsc --noEmit`, `prettier --check`, `vite build`.
 ## Known Limitations
 - ✅ Resizing / rotating an **artboard** now re-anchors its assigned children
   (see M6) — this closes the old "children don't follow the artboard" gap.
