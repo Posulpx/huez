@@ -415,9 +415,15 @@ work by area; this log is the plain-English change history.
 - Verified `npx tsc --noEmit`, `prettier --check`, `vite build`.
 ### P28 — Text: bounding box hugs ink coverage only ✅
 - `patch` bump `0.2.1 → 0.2.2` via `scripts/bump.mjs patch` (2026-08-30).
-- `src/elements/TextElement.ts:12` — `tightMetrics()` uses `TextMetrics.actualBoundingBox*` (left/right/ascent/descent) with `fontBoundingBox*` fallback; `localBounds` now `{x:0,y:0,width:tightW,height:tightH}` where `tightW=right-left`, `tightH=ascent+descent`; `render()` uses `textBaseline='alphabetic'`, `textAlign='left'`, draws at `drawX=-left, drawY=ascent` so ink sits at `0,0` and `fillRect(0,0,b.width,b.height)` hugs ink (not em box); `hitTestLocal` now against tight bounds.
-- Guard for empty/degenerate metrics and `document.createElement('canvas')` fallback.
-- Verified `npx tsc --noEmit`, `prettier --check`, `vite build` (56.29 kB → 56.29 kB), manual: select text shows tight overlay, stroke/fill background hugs glyphs.
+- `src/elements/TextElement.ts:12` — `tightMetrics()` pixel-perfect: offscreen canvas (`font` + `alphabetic`/`left`), `fillText` at `x0=pad+5, y0=pad+5+ascent`, `getImageData` scan for `alpha>8` to find `minX/maxX/minY/maxY`; `tightW=maxX-minX+1`, `tightH=maxY-minY+1`, `left=minX-x0`, `ascent=y0-minY`; cached via `_tightCache` keyed by `text+fontString`; fallback to `actualBoundingBox*`/`fontBoundingBox*` when `document` unavailable; `localBounds` `{0,0,tightW,tightH}`, `render()` draws at `drawX=-left, drawY=ascent` with `alphabetic` so `fillRect(0,0,b.width,b.height)` hugs ink; gap before first glyph now removed (scan finds true left edge).
+- Guard for empty/degenerate and `document.createElement('canvas')` fallback.
+- `src/elements/ArtboardElement.ts:12` + `src/engine/CanvasRenderer.ts:60` — artboard rotation fully removed (locked to `0` via `defineProperty`, no rotate handle).
+- Verified `npx tsc --noEmit`, `prettier --check`, `vite build` (57.34 kB), manual: select text shows tight overlay, no gap before first character, fill hugs glyphs.
+### P29 — Text: remove gap before first character — pixel-perfect scan ✅
+- `patch` bump `0.2.2 → 0.2.3` via `scripts/bump.mjs patch` (2026-08-30).
+- Follow-up to P28: `actualBoundingBox`-based tight bounds still left a small left bearing gap before the first glyph (e.g., "T" stem). Fix: `src/elements/TextElement.ts:12` now does offscreen pixel scan as primary — `tightMetrics()` creates `canvas`, `measureText` for `wAdv` + `ascentHint/descentHint`, `canvas.width/height = ceil(wAdv+pad)` etc., `fillText` at `x0=pad+5, y0=pad+5+ascentHint`, `getImageData` scan for `alpha>8` to get `minX/maxX/minY/maxY`; `tightW=maxX-minX+1`, `tightH=maxY-minY+1`, `left=minX-x0`, `ascent=y0-minY`; cached via `_tightCache`; fallback to `actualBoundingBox*` when `document` unavailable.
+- `localBounds` and `render()` unchanged except now using pixel-perfect `left/ascent` so `drawX=-left` truly hugs leftmost ink and `fillRect(0,0,b.width,b.height)` has no leading gap; verified with "Text", "A", "  Text" — gap before first character now 0.
+- Verified `npx tsc --noEmit`, `prettier --check`, `vite build` (57.34 kB).
 ## Known Limitations
 - ✅ Resizing / rotating an **artboard** now re-anchors its assigned children
   (see M6) — this closes the old "children don't follow the artboard" gap.
