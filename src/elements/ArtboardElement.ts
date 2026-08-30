@@ -26,6 +26,13 @@ export class ArtboardElement extends BaseElement {
     this.name = 'Artboard'
     this.width = width
     this.height = height
+    // Artboards are axis-aligned — lock rotation to 0
+    Object.defineProperty(this, 'rotation', {
+      get: () => 0,
+      set: () => {},
+      configurable: true,
+      enumerable: true,
+    })
   }
 
   protected get localBounds(): Bounds {

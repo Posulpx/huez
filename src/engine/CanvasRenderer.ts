@@ -281,13 +281,14 @@ export class CanvasRenderer {
       ctx.stroke()
       ctx.setLineDash([])
 
-      // Handles (skip the rotate handle for multi-selection).
+      // Handles (skip the rotate handle for multi-selection and for artboards).
       const handles = handlePoints(el)
+      const isArtboard = el instanceof ArtboardElement
       const isSingle = scene.selected.length === 1
       const top = this.worldCorner(el, b.width / 2, 0)
       const rotate = handles.find((h) => h.id === 'rotate')
 
-      if (isSingle && rotate) {
+      if (isSingle && rotate && !isArtboard) {
         ctx.beginPath()
         ctx.moveTo(top.x, top.y)
         ctx.lineTo(rotate.x, rotate.y)

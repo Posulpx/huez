@@ -42,9 +42,67 @@ export class TextElement extends BaseElement {
     return `${this.fontStyle} ${this.fontSize}px ${this.fontFamily}`
   }
 
+  /** Tight ink metrics — uses TextMetrics.actualBoundingBox* when available. */
+  private tightMetrics(): {
+    width: number
+    height: number
+    left: number
+    ascent: number
+  } {
+    const ctx = document.createElement('canvas').getContext('2d')
+    if (!ctx) {
+      return {
+        width: this.text.length * this.fontSize * 0.6,
+        height: this.fontSize,
+        left: 0,
+        ascent: this.fontSize * 0.8,
+      }
+    }
+    ctx.font = this.fontString()
+    // Use alphabetic baseline for stable ascent/descent
+    ctx.textBaseline = 'alphabetic'
+    ctx.textAlign = 'left'
+    const m = ctx.measureText(this.text)
+    const w = m.width
+    // Prefer actual ink box, fall back to font box
+    const left =
+      (m as unknown as { actualBoundingBoxLeft?: number })
+        .actualBoundingBoxLeft ?? 0
+    const right =
+      (m as unknown as { actualBoundingBoxRight?: number })
+        .actualBoundingBoxRight ?? w
+    const ascent =
+      (m as unknown as { actualBoundingBoxAscent?: number })
+        .actualBoundingBoxAscent ??
+      (m as unknown as { fontBoundingBoxAscent?: number })
+        .fontBoundingBoxAscent ??
+      this.fontSize * 0.8
+    const descent =
+      (m as unknown as { actualBoundingBoxDescent?: number })
+        .actualBoundingBoxDescent ??
+      (m as unknown as { fontBoundingBoxDescent?: number })
+        .fontBoundingBoxDescent ??
+      this.fontSize * 0.2
+    const tightW = right - left
+    const tightH = ascent + descent
+    // Guard against empty string or degenerate metrics
+    if (!Number.isFinite(tightW) || tightW <= 0) {
+      return {
+        width: w || 1,
+        height: this.fontSize,
+        left: 0,
+        ascent: ascent || this.fontSize * 0.8,
+      }
+    }
+    if (!Number.isFinite(tightH) || tightH <= 0) {
+      return { width: tightW || w, height: this.fontSize, left, ascent }
+    }
+    return { width: tightW, height: tightH, left, ascent }
+  }
+
   protected get localBounds(): Bounds {
-    const metrics = this.measure()
-    return { x: 0, y: 0, width: metrics.width, height: this.fontSize }
+    const m = this.tightMetrics()
+    return { x: 0, y: 0, width: m.width, height: m.height }
   }
 
   get bounds(): Bounds {
@@ -52,34 +110,30 @@ export class TextElement extends BaseElement {
     return { x: this.x, y: this.y, width: b.width, height: b.height }
   }
 
-  private measure(): { width: number } {
-    // A throwaway context is the simplest way to get text metrics.
-    const ctx = document.createElement('canvas').getContext('2d')
-    if (!ctx) return { width: this.text.length * this.fontSize * 0.6 }
-    ctx.font = this.fontString()
-    return { width: ctx.measureText(this.text).width }
-  }
-
   protected render(ctx: CanvasRenderingContext2D): void {
+    const m = this.tightMetrics()
     ctx.font = this.fontString()
-    ctx.textBaseline = 'top'
+    ctx.textBaseline = 'alphabetic'
+    ctx.textAlign = 'left'
     ctx.fillStyle = this.color
 
     if (this.style.fill) {
-      // Painted background behind the text, e.g. a highlight box.
+      // Tight background — hugs ink, not em box
       ctx.fillStyle = this.style.fill
       const b = this.localBounds
       ctx.fillRect(0, 0, b.width, b.height)
       ctx.fillStyle = this.color
     }
 
+    const drawX = -m.left
+    const drawY = m.ascent
     if (this.style.stroke && this.style.strokeWidth > 0) {
       ctx.lineWidth = this.style.strokeWidth
       ctx.strokeStyle = this.style.stroke
-      ctx.strokeText(this.text, 0, 0)
+      ctx.strokeText(this.text, drawX, drawY)
     }
 
-    ctx.fillText(this.text, 0, 0)
+    ctx.fillText(this.text, drawX, drawY)
   }
 
   protected hitTestLocal(p: Point): boolean {

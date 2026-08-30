@@ -1,6 +1,6 @@
 {
   "name": "huez",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "HueZ — modular, open-source Canvas API tool modules (text, dynamic shapes, fills, strokes, drop shadows, and more).",
   "type": "module",
   "license": "MIT",
