@@ -2,6 +2,7 @@ import type { Tool, ToolContext } from './Tool'
 import { TextElement } from '../elements/TextElement'
 import { logApiCall } from './log'
 import { elementProps, recordToolProps, recordToolUsed } from './records'
+import type { TextEditor } from '../ui/TextEditor'
 
 /**
  * Places a new text element where the user clicks, then selects it so
@@ -13,6 +14,8 @@ export class TextTool implements Tool {
   readonly icon = 'T'
   readonly cursor = 'text'
   readonly category: Tool['category'] = 'geometry'
+
+  constructor(private editor?: TextEditor) {}
 
   onPointerDown(ctx: ToolContext): void {
     const el = new TextElement(ctx.point.x, ctx.point.y, { text: 'Text' })
@@ -26,6 +29,11 @@ export class TextTool implements Tool {
     recordToolProps(this.id, this.label, shared, specific)
     logApiCall(`scene.add`, `text (${el.id})`)
     ctx.requestRender()
+    // Immediately enter in-line edit — ink stays at click point, box hidden
+    if (this.editor) {
+      // Defer to next frame so the element is rendered before overlay
+      requestAnimationFrame(() => this.editor!.startEdit(el))
+    }
   }
 
   onPointerMove(): void {}

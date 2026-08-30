@@ -12,6 +12,8 @@ import { ToolPalette } from './ToolPalette'
 import { PropertiesPanel } from './PropertiesPanel'
 import { LayerPanel } from './LayerPanel'
 import { ActivityPanel } from './ActivityPanel'
+import { TextEditor } from './TextEditor'
+import { TextElement } from '../elements/TextElement'
 
 /**
  * Top-level application wiring: builds the engine, registers tools,
@@ -22,6 +24,7 @@ export class App {
   private scene = new Scene()
   private renderer: CanvasRenderer
   private tools: ToolManager
+  private textEditor: TextEditor
   private panning = false
   private panLast: { x: number; y: number } | null = null
 
@@ -34,6 +37,10 @@ export class App {
   ) {
     this.renderer = new CanvasRenderer(canvas)
     this.tools = new ToolManager(this.scene, this.renderer, () => this.render())
+    const stage = canvas.parentElement as HTMLElement
+    this.textEditor = new TextEditor(stage, this.scene, this.renderer, () =>
+      this.render()
+    )
 
     this.registerTools()
 
@@ -47,6 +54,8 @@ export class App {
       paletteRoot,
       this.tools.list(),
       (id) => {
+        // Commit any in-line text edit before switching tools — keeps ink steady
+        if (this.textEditor.isEditing()) this.textEditor.commit()
         this.tools.setActive(id)
         this.render()
       },
@@ -68,7 +77,7 @@ export class App {
     this.tools.register(new ShapeTool('rectangle', 'Rectangle', '▭'))
     this.tools.register(new ShapeTool('ellipse', 'Ellipse', '◯'))
     this.tools.register(new ShapeTool('line', 'Line', '╱'))
-    this.tools.register(new TextTool())
+    this.tools.register(new TextTool(this.textEditor))
     this.tools.register(new ArtboardTool())
     this.tools.register(new PanTool())
     this.tools.register(new PenTool())
@@ -77,8 +86,30 @@ export class App {
   private bindCanvas(): void {
     const canvas = this.canvas
 
+    // Double-click on a text element enters in-line edit — ink stays steady, box hidden
+    canvas.addEventListener('dblclick', (e) => {
+      const world = this.renderer.toWorld(e.clientX, e.clientY)
+      const hit = this.scene.hitTest(world, this.renderer.scale)
+      if (hit instanceof TextElement) {
+        e.preventDefault()
+        this.scene.select(hit)
+        this.textEditor.startEdit(hit)
+        this.render()
+      }
+    })
+
     // Middle-mouse drag pans the viewport regardless of the active tool.
     canvas.addEventListener('pointerdown', (e) => {
+      // If editing, let the textarea handle it — don't start a canvas drag
+      if (this.textEditor.isEditing()) {
+        // Click outside the textarea will be handled by TextEditor's stage listener to commit
+        // If click is on the canvas while editing a different text, commit first
+        const world = this.renderer.toWorld(e.clientX, e.clientY)
+        const hit = this.scene.hitTest(world, this.renderer.scale)
+        if (hit instanceof TextElement && this.textEditor.isEditing(hit)) return
+        // Otherwise commit and allow new selection
+        this.textEditor.commit()
+      }
       if (e.button === 1) {
         canvas.setPointerCapture(e.pointerId)
         this.panning = true
@@ -96,6 +127,7 @@ export class App {
         const dy = e.clientY - this.panLast.y
         this.panLast = { x: e.clientX, y: e.clientY }
         this.renderer.pan(dx, dy)
+        this.textEditor.sync()
         this.render()
         return
       }
@@ -118,6 +150,7 @@ export class App {
         e.preventDefault()
         const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1
         this.renderer.zoomAt(e.clientX, e.clientY, factor)
+        this.textEditor.sync()
         this.render()
       },
       { passive: false }
@@ -148,5 +181,6 @@ export class App {
 
   private render(): void {
     this.renderer.render(this.scene)
+    this.textEditor.sync()
   }
 }

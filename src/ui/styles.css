@@ -630,3 +630,24 @@ body {
   color: var(--muted);
   font-size: 10px;
 }
+
+/* ---- In-line text editor ---- */
+.text-editor {
+  position: absolute;
+  background: rgba(15, 17, 21, 0.92);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  padding: 4px 6px;
+  color: var(--text);
+  caret-color: var(--accent);
+  outline: none;
+  resize: none;
+  overflow: hidden;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.2;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  z-index: 10;
+  min-width: 40px;
+  min-height: 24px;
+}

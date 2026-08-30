@@ -1,6 +1,7 @@
 import type { BaseElement } from './BaseElement'
 import type { Scene } from './Scene'
 import { ArtboardElement } from '../elements/ArtboardElement'
+import { TextElement } from '../elements/TextElement'
 import { handlePoints, HANDLE_HIT_RADIUS } from './TransformHandles'
 
 /**
@@ -238,6 +239,9 @@ export class CanvasRenderer {
     ctx.save()
     for (const el of scene.selected) {
       if (!el.visible) continue
+      // In edit mode the text's bounding box is hidden and the caret must not
+      // affect it — the DOM textarea is the caret host.
+      if (el instanceof TextElement && el.editing) continue
       const b = el.bounds
 
       // Selected artboards get an orange label highlight so the move handle is

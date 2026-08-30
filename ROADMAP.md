@@ -122,11 +122,14 @@ See `scripts/bump.mjs` and `scripts/check-roadmap.mjs` for the automation.
 ### M8 — Classified, collapsible tool palette ✅
 - `P26` — `Tool.category` wiring + collapsible Geometry/Interaction/Workspace groups + persistence + styling.
 
+### M9 — Text in-line editing (multiline, steady ink, hidden box) ✅
+- `P28-P30` — tight ink bounds (pixel-perfect, gap removed), multiline (`split('\n')`, per-line metrics, `lineMetrics`), in-line editor (`TextEditor` overlay, `editing` flag, `dblclick` to edit, `TextTool` auto-edit, `CanvasRenderer` hides box when editing).
+
 ---
 
 ## Progress Log
 
-A chronological record of everything implemented. Milestones (M0–M8) group the
+A chronological record of everything implemented. Milestones (M0–M9) group the
 work by area; this log is the plain-English change history.
 
 ### P0 — Scaffold & first build ✅
@@ -424,6 +427,15 @@ work by area; this log is the plain-English change history.
 - Follow-up to P28: `actualBoundingBox`-based tight bounds still left a small left bearing gap before the first glyph (e.g., "T" stem). Fix: `src/elements/TextElement.ts:12` now does offscreen pixel scan as primary — `tightMetrics()` creates `canvas`, `measureText` for `wAdv` + `ascentHint/descentHint`, `canvas.width/height = ceil(wAdv+pad)` etc., `fillText` at `x0=pad+5, y0=pad+5+ascentHint`, `getImageData` scan for `alpha>8` to get `minX/maxX/minY/maxY`; `tightW=maxX-minX+1`, `tightH=maxY-minY+1`, `left=minX-x0`, `ascent=y0-minY`; cached via `_tightCache`; fallback to `actualBoundingBox*` when `document` unavailable.
 - `localBounds` and `render()` unchanged except now using pixel-perfect `left/ascent` so `drawX=-left` truly hugs leftmost ink and `fillRect(0,0,b.width,b.height)` has no leading gap; verified with "Text", "A", "  Text" — gap before first character now 0.
 - Verified `npx tsc --noEmit`, `prettier --check`, `vite build` (57.34 kB).
+### P30 — Text in-line editing, ink steady, box hidden, multiline ✅
+- `minor` bump `0.2.3 → 0.3.0` via `scripts/bump.mjs minor` (2026-08-30).
+- `src/elements/TextElement.ts:12` — `editing` flag, multiline support: `tightMetrics()` and `lineMetrics()` per-line pixel scan, `localBounds` width = max line tightW, height = sum tightH + gap (`max(4, fontSize*0.2)`), `render()` splits `text.split('\n')` and draws each line at `drawX=-left, drawY=y+ascent` with `alphabetic` baseline; `if (editing) return` hides canvas ink while editing (DOM textarea shows live text) — box hidden via `CanvasRenderer` check.
+- `src/ui/TextEditor.ts:1` — new `TextEditor` (`stage, scene, renderer, requestRender`): creates `<textarea class="text-editor">` absolutely positioned at `world->screen` (`x*scale+offsetX`), `fontSize*scale`, `lineHeight 1.2`, `whiteSpace pre-wrap`, `overflow hidden`, `background transparent` + `border accent`; `startEdit(el)` sets `el.editing=true`, positions via `positionOverlay` (`b.x*scale+offsetX`), focuses/selects, `input` updates `el.text` live + `autoSize()` + `requestRender`, `keydown` Esc=cancel, Ctrl+Enter=commit, `blur` commits, `stage` pointerdown outside commits; `commit()` sets `el.text=ta.value`, `el.editing=false`, removes overlay, selects or removes if empty; `cancel()` restores; `sync()` on zoom/pan.
+- `src/ui/App.ts:12` — `TextEditor` wired in `constructor` (`new TextEditor(stage, scene, renderer)`), `registerTools()` passes editor to `TextTool`, `bindCanvas()` adds `dblclick` to edit `TextElement`, `pointerdown` commits if editing hit mismatch, `pointermove`/`wheel`/`render()` call `textEditor.sync()`, `ToolPalette` switch commits.
+- `src/tools/TextTool.ts:12` — `constructor(private editor?: TextEditor)`, `onPointerDown` creates `TextElement` at click, selects, then `requestAnimationFrame(() => editor.startEdit(el))` — ink stays at click point, box hidden.
+- `src/engine/CanvasRenderer.ts:60` — `drawSelectionOverlay` skips `if (el instanceof TextElement && el.editing) continue` — caret (in DOM) does not affect canvas bounds.
+- `src/ui/styles.css:60` — `.text-editor` absolute, `background rgba(15,17,21,0.92)`, `border accent`, `caret-color accent`, `min-width/height`, `z-index 10`.
+- Verified `npx tsc --noEmit`, `prettier --check`, `vite build` (62.70 kB), manual: double-click text → textarea at same world pos, type multiline (Enter = newline), bounds hidden, pan/zoom keeps overlay aligned, ink steady.
 ## Known Limitations
 - ✅ Resizing / rotating an **artboard** now re-anchors its assigned children
   (see M6) — this closes the old "children don't follow the artboard" gap.
