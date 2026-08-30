@@ -15,6 +15,7 @@ export class PenTool implements Tool {
   readonly label = 'Pen'
   readonly icon = '∿'
   readonly cursor = 'crosshair'
+  readonly category: Tool['category'] = 'geometry'
 
   private path: PathElement | null = null
   private activeIndex = -1

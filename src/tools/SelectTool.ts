@@ -35,6 +35,7 @@ export class SelectTool implements Tool {
   readonly label = 'Select'
   readonly icon = '▶'
   readonly cursor = 'default'
+  readonly category: Tool['category'] = 'interaction'
 
   private dragging = false
   private start: Point | null = null

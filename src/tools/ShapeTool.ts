@@ -13,6 +13,7 @@ export class ShapeTool implements Tool {
   readonly label: string
   readonly icon: string
   readonly cursor = 'crosshair'
+  readonly category: Tool['category'] = 'geometry'
 
   private draft: ShapeElement | null = null
 

@@ -12,6 +12,7 @@ export class TextTool implements Tool {
   readonly label = 'Text'
   readonly icon = 'T'
   readonly cursor = 'text'
+  readonly category: Tool['category'] = 'geometry'
 
   onPointerDown(ctx: ToolContext): void {
     const el = new TextElement(ctx.point.x, ctx.point.y, { text: 'Text' })

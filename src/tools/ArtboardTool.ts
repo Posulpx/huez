@@ -12,6 +12,7 @@ export class ArtboardTool implements Tool {
   readonly label = 'Artboard'
   readonly icon = '◳'
   readonly cursor = 'crosshair'
+  readonly category: Tool['category'] = 'workspace'
 
   private draft: ArtboardElement | null = null
 

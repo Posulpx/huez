@@ -119,11 +119,14 @@ See `scripts/bump.mjs` and `scripts/check-roadmap.mjs` for the automation.
 ### M7 — Tooling parity (ZX) + artboard-confined selection ✅
 - `P23` — ZX parity: `zx` scripts, `prettier` parity, `lefthook`, `commitlint`; `P24` — selection confined to artboard origin (no cross-artboard Shift/marquee); `P25` — release habit automation (`scripts/bump.mjs`, `scripts/check-roadmap.mjs`, pre-push gate).
 
+### M8 — Classified, collapsible tool palette ✅
+- `P26` — `Tool.category` wiring + collapsible Geometry/Interaction/Workspace groups + persistence + styling.
+
 ---
 
 ## Progress Log
 
-A chronological record of everything implemented. Milestones (M0–M6) group the
+A chronological record of everything implemented. Milestones (M0–M8) group the
 work by area; this log is the plain-English change history.
 
 ### P0 — Scaffold & first build ✅
@@ -397,6 +400,13 @@ work by area; this log is the plain-English change history.
 
 ---
 
+### P26 — Tool palette — classify by Geometry/Interaction/Workspace, collapsible groups, fix wiring ✅
+- `minor` bump `0.1.0 → 0.2.0` via `scripts/bump.mjs minor` (2026-08-30).
+- `Tool.category` wiring fix: `src/tools/Tool.ts:12` now `category: 'geometry'|'interaction'|'workspace'` — Geometry (Circle/Ellipse, Rect, Line, Pen, Text), Interaction (Select, Pan + future Zoom/Fit), Workspace (Artboard + future Guide). Each tool sets `readonly category` (`SelectTool:8`, `PanTool:8`, `ShapeTool:11`, `TextTool:8`, `ArtboardTool:10`, `PenTool:8`).
+- `src/ui/ToolPalette.ts:1` rewritten to group by `Tool.category` (wiring via `grouped: Map<ToolCategory,Tool[]>`), render collapsible `tool-group` sections (`CATEGORY_ORDER`, `CATEGORY_LABEL/HINT`, `STORAGE_KEY='huez:tool-groups:collapsed'`), `tool-group-header` with count+arrow, `tool-group-body` with `tool-grid`; toggle collapses + persists to `localStorage`, active tool auto-expands its group. Empty `workspace` shows "Guide — coming soon".
+- `src/ui/styles.css:65` — `.tool-group`, `.tool-group-header/count/arrow`, `.tool-group-body` (hidden when `.collapsed`), `.tool-group-empty`.
+- `src/ui/App.ts:22` wiring unchanged — `registerTools()` then `new ToolPalette(paletteRoot, this.tools.list(), ...)` — grouping now derived from `Tool.category` not id heuristics.
+- Verified `npx tsc --noEmit`, `npx prettier --check`, `npx zx scripts/check.mjs`, `npx zx scripts/build.mjs` (53.9 kB).
 ## Known Limitations
 - ✅ Resizing / rotating an **artboard** now re-anchors its assigned children
   (see M6) — this closes the old "children don't follow the artboard" gap.

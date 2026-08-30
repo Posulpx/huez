@@ -10,6 +10,7 @@ export class PanTool implements Tool {
   readonly label = 'Pan'
   readonly icon = '✥'
   readonly cursor = 'grab'
+  readonly category: Tool['category'] = 'interaction'
 
   private last: Point | null = null
 

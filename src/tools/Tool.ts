@@ -21,6 +21,8 @@ export interface ToolContext {
   setCursor(cursor: string): void
 }
 
+export type ToolCategory = 'geometry' | 'interaction' | 'workspace'
+
 /**
  * A tool reacts to pointer interaction and drives the scene. Tools never
  * touch the DOM directly; they communicate through ToolContext.
@@ -30,6 +32,8 @@ export interface Tool {
   readonly label: string
   readonly icon: string
   readonly cursor: string
+  /** Wiring: which collapsible palette group the tool belongs to. */
+  readonly category: ToolCategory
   onActivate?(ctx: ToolContext): void
   onDeactivate?(ctx: ToolContext): void
   onPointerDown(ctx: ToolContext): void
