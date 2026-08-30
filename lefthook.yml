@@ -1,0 +1,21 @@
+# HueZ — lefthook config mirrored from google/zx (lefthook.yml)
+# Install: npx lefthook install  (also via npm prepare)
+pre-commit:
+  parallel: true
+  commands:
+    fmt:
+      glob: '*.{js,ts,mjs,cjs,md,yml,yaml,json,css}'
+      run: npx prettier --write {staged_files} && git add {staged_files}
+
+commit-msg:
+  commands:
+    lint-commit-msg:
+      run: npx commitlint --edit {1}
+
+pre-push:
+  parallel: true
+  commands:
+    typecheck:
+      run: npx tsc --noEmit
+    fmt-check:
+      run: npx prettier --check .

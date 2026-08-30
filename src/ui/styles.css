@@ -18,7 +18,12 @@ html,
 body {
   margin: 0;
   height: 100%;
-  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  font-family:
+    system-ui,
+    -apple-system,
+    Segoe UI,
+    Roboto,
+    sans-serif;
   background: var(--bg);
   color: var(--text);
 }
@@ -74,7 +79,9 @@ body {
   border-radius: 10px;
   color: var(--text);
   cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
 }
 
 .tool-btn:hover {
@@ -139,12 +146,12 @@ body {
   gap: 8px;
 }
 
-.prop-controls input[type="range"] {
+.prop-controls input[type='range'] {
   flex: 1;
   accent-color: var(--accent);
 }
 
-.prop-controls input[type="color"] {
+.prop-controls input[type='color'] {
   width: 36px;
   height: 28px;
   border: 1px solid var(--border);
@@ -154,7 +161,7 @@ body {
   cursor: pointer;
 }
 
-.prop-controls input[type="text"] {
+.prop-controls input[type='text'] {
   flex: 1;
   background: var(--panel-2);
   border: 1px solid var(--border);
