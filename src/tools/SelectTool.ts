@@ -46,6 +46,30 @@ export class SelectTool implements Tool {
     null
   private marqueeBase = new Set<string>()
 
+  /** Artboard that the current selection belongs to (null = free/canvas, undefined = empty). */
+  private selectionScopeId(
+    scene: ToolContext['scene']
+  ): string | null | undefined {
+    const sel = scene.selected
+    if (sel.length === 0) return undefined
+    // Scope is defined by the first selected element's artboard. The
+    // invariant is that a selection never mixes scopes — enforced in
+    // onPointerDown / updateMarqueeSelection — so checking the first is enough.
+    return sel[0]!.artboardId
+  }
+
+  /** Where a marquee selection is allowed to collect from. */
+  private marqueeOriginId(ctx: ToolContext): string | null {
+    if (this.marqueeBase.size > 0) {
+      const firstId = [...this.marqueeBase][0]!
+      const el = ctx.scene.getElementById(firstId)
+      return el ? (el.artboardId ?? null) : null
+    }
+    const m = this.marquee!
+    const ab = ctx.scene.artboardAtPoint({ x: m.x0, y: m.y0 })
+    return ab ? ab.id : null
+  }
+
   onPointerDown(ctx: ToolContext): void {
     this.moved = false
     const selected = ctx.scene.selected
@@ -62,6 +86,18 @@ export class SelectTool implements Tool {
     const target = ctx.scene.hitTest(ctx.point)
     if (target) {
       if (!ctx.scene.isSelected(target)) {
+        // Confine additive selection to the artboard origin of the current
+        // selection. A plain click (replace) is always allowed — it becomes
+        // the new origin. Shift-click may only add items from the same scope.
+        if (ctx.shiftKey && selected.length > 0) {
+          const origin = this.selectionScopeId(ctx.scene)
+          if (origin !== undefined && target.artboardId !== origin) {
+            // Belongs to another artboard — ignore for selection. We still
+            // allow the existing selection to be dragged if the click landed
+            // on empty space, but not when it lands on a foreign item.
+            return
+          }
+        }
         ctx.scene.select(target, ctx.shiftKey)
         logApiCall(`scene.select`, target.id)
       }
@@ -111,7 +147,9 @@ export class SelectTool implements Tool {
 
   /** Recompute the selection from the marquee rectangle: every (unlocked)
    *  element whose bounds intersect the marquee is selected, plus the base
-   *  selection for additive (Shift) marquees. */
+   *  selection for additive (Shift) marquees. The marquee is confined to the
+   *  artboard origin of the selection — items from another artboard are never
+   *  added. */
   private updateMarqueeSelection(ctx: ToolContext): void {
     const m = this.marquee!
     const l = Math.min(m.x0, m.x1)
@@ -119,22 +157,19 @@ export class SelectTool implements Tool {
     const t = Math.min(m.y0, m.y1)
     const b = Math.max(m.y0, m.y1)
     const ids = new Set(this.marqueeBase)
-    // If the marquee was started inside an artboard, it's a "select contents"
-    // gesture — exclude artboards themselves so only their contents get
-    // selected. Marquees started in free space can still select artboards.
-    const insideArtboard = ctx.scene.artboards.some((a) => {
-      const ax0 = Math.min(a.x, a.x + a.width)
-      const ax1 = Math.max(a.x, a.x + a.width)
-      const ay0 = Math.min(a.y, a.y + a.height)
-      const ay1 = Math.max(a.y, a.y + a.height)
-      return m.x0 >= ax0 && m.x0 <= ax1 && m.y0 >= ay0 && m.y0 <= ay1
-    })
+    const originId = this.marqueeOriginId(ctx)
+    const insideArtboard = originId !== null
+
     for (const el of ctx.scene.all) {
-      if (el instanceof ArtboardElement && insideArtboard) continue
       if (el.locked) continue
-      // A marquee started in free space selects only free objects and
-      // artboards — contents assigned to an artboard stay out of scope.
-      if (!insideArtboard && el.artboardId !== null) continue
+      if (el instanceof ArtboardElement) {
+        // Artboards are only selectable when the marquee origin is free (null).
+        // A marquee confined to an artboard selects only that artboard's contents.
+        if (insideArtboard) continue
+      } else {
+        // Non-artboard items must belong to the marquee's origin scope.
+        if (el.artboardId !== originId) continue
+      }
       const eb = el.bounds
       const elL = Math.min(eb.x, eb.x + eb.width)
       const elR = Math.max(eb.x, eb.x + eb.width)
