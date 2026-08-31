@@ -17,6 +17,7 @@ export class PathEditor {
   private editingPath: PathElement | null = null
   private drag: { index: number; kind: 'anchor' | 'hIn' | 'hOut' } | null = null
   private dragAnchorStart: Point | null = null
+  private dragOppositeLen: number | null = null
 
   constructor(
     private scene: Scene,
@@ -53,6 +54,7 @@ export class PathEditor {
     this.editingPath = null
     this.drag = null
     this.dragAnchorStart = null
+    this.dragOppositeLen = null
     this.requestRender()
   }
 
@@ -73,8 +75,17 @@ export class PathEditor {
       if (hit.kind === 'anchor') {
         const a = path.points[hit.index]!
         this.dragAnchorStart = { x: a.x, y: a.y }
+        this.dragOppositeLen = null
       } else {
         this.dragAnchorStart = null
+        // Capture opposite handle length to preserve asymmetry when locked
+        const a = path.points[hit.index]!
+        const opposite = hit.kind === 'hIn' ? a.hOut : a.hIn
+        if (opposite) {
+          this.dragOppositeLen = Math.hypot(opposite.x - a.x, opposite.y - a.y)
+        } else {
+          this.dragOppositeLen = null
+        }
       }
       this.requestRender()
       return true
@@ -86,6 +97,9 @@ export class PathEditor {
       const idx = path.insertAnchorAtVisual(info.projected, info.segmentIndex)
       path.editingSelected = idx
       this.drag = { index: idx, kind: 'anchor' }
+      const a = path.points[idx]!
+      this.dragAnchorStart = { x: a.x, y: a.y }
+      this.dragOppositeLen = null
       this.requestRender()
       return true
     }
@@ -138,18 +152,36 @@ export class PathEditor {
       }
     } else if (d.kind === 'hIn') {
       anchor.hIn = { x: stored.x, y: stored.y }
-      // By default locked: mirror out handle symmetrically
+      // By default angular lock: preserve asymmetry (opposite keeps its length, angle 180°)
       if (!altKey) {
         const vx = stored.x - anchor.x
         const vy = stored.y - anchor.y
-        anchor.hOut = { x: anchor.x - vx, y: anchor.y - vy }
+        const angle = Math.atan2(vy, vx)
+        const len =
+          this.dragOppositeLen !== null
+            ? this.dragOppositeLen
+            : Math.hypot(vx, vy)
+        const oppAngle = angle + Math.PI
+        anchor.hOut = {
+          x: anchor.x + Math.cos(oppAngle) * len,
+          y: anchor.y + Math.sin(oppAngle) * len,
+        }
       }
     } else if (d.kind === 'hOut') {
       anchor.hOut = { x: stored.x, y: stored.y }
       if (!altKey) {
         const vx = stored.x - anchor.x
         const vy = stored.y - anchor.y
-        anchor.hIn = { x: anchor.x - vx, y: anchor.y - vy }
+        const angle = Math.atan2(vy, vx)
+        const len =
+          this.dragOppositeLen !== null
+            ? this.dragOppositeLen
+            : Math.hypot(vx, vy)
+        const oppAngle = angle + Math.PI
+        anchor.hIn = {
+          x: anchor.x + Math.cos(oppAngle) * len,
+          y: anchor.y + Math.sin(oppAngle) * len,
+        }
       }
     }
     this.requestRender()
@@ -160,6 +192,7 @@ export class PathEditor {
     if (!this.drag) return false
     this.drag = null
     this.dragAnchorStart = null
+    this.dragOppositeLen = null
     this.requestRender()
     return true
   }
