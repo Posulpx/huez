@@ -107,6 +107,7 @@ export class PenTool implements Tool {
           closed: cand.closed,
         }
         this.resumeEnd = hit.index === 0 ? 'start' : 'end'
+        cand.resumeEnd = this.resumeEnd
         this.activeIndex = hit.index
         this.dragging = false
         this.dragStart = null
@@ -361,6 +362,7 @@ export class PenTool implements Tool {
   }
 
   private reset(): void {
+    if (this.path) this.path.resumeEnd = null
     this.path = null
     this.activeIndex = -1
     this.dragging = false

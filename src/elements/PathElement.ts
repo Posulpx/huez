@@ -27,6 +27,8 @@ export class PathElement extends BaseElement {
   editingSelected: number = -1
   /** World-space cursor used for the in-progress rubber-band preview. */
   cursor: Point | null = null
+  /** When pen resumes an open path, indicates which end is being continued for preview. */
+  resumeEnd: 'start' | 'end' | null = null
 
   constructor(x: number, y: number, style?: Partial<ElementStyle>) {
     super(x, y, { fill: null, stroke: '#1d1d1f', strokeWidth: 2, ...style })
@@ -147,14 +149,39 @@ export class PathElement extends BaseElement {
   private renderDraft(ctx: CanvasRenderingContext2D): void {
     const pts = this.points
     if (this.cursor && pts.length) {
-      const last = pts[pts.length - 1]!
       ctx.save()
       ctx.strokeStyle = '#4f8cff'
       ctx.lineWidth = 1
       ctx.setLineDash([4, 4])
       ctx.beginPath()
-      ctx.moveTo(last.x, last.y)
-      ctx.lineTo(this.cursor.x, this.cursor.y)
+      if (this.resumeEnd === 'start') {
+        const first = pts[0]!
+        ctx.moveTo(this.cursor.x, this.cursor.y)
+        if (first.hIn) {
+          const c1 = { x: this.cursor.x, y: this.cursor.y }
+          const c2 = first.hIn
+          ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, first.x, first.y)
+        } else {
+          ctx.lineTo(first.x, first.y)
+        }
+      } else {
+        const last = pts[pts.length - 1]!
+        ctx.moveTo(last.x, last.y)
+        if (last.hOut) {
+          const c1 = last.hOut
+          const c2 = { x: this.cursor.x, y: this.cursor.y }
+          ctx.bezierCurveTo(
+            c1.x,
+            c1.y,
+            c2.x,
+            c2.y,
+            this.cursor.x,
+            this.cursor.y
+          )
+        } else {
+          ctx.lineTo(this.cursor.x, this.cursor.y)
+        }
+      }
       ctx.stroke()
       ctx.restore()
     }
