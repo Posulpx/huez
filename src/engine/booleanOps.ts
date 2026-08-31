@@ -2,6 +2,7 @@ import polygonClipping from 'polygon-clipping'
 import { PathElement } from '../elements/PathElement'
 import { ShapeElement } from '../elements/ShapeElement'
 import { shapeToPath } from './shapeToPath'
+import { booleanOpPaper } from './booleanOpsPaper'
 import type { BaseElement } from './BaseElement'
 import type { Point } from './types'
 
@@ -172,6 +173,18 @@ export function booleanOp(
   b: BaseElement,
   op: BooleanOp
 ): PathElement[] | null {
+  // Try paper.js first for bezier handle preservation (fewer nodes)
+  try {
+    const paperResult = booleanOpPaper(a, b, op)
+    if (paperResult !== null) {
+      // Paper succeeded (including empty []), use it if it has reasonable node count
+      // Paper preserves original bezier segments, so much fewer nodes than 24*segments
+      return paperResult
+    }
+  } catch {
+    // fall through to polygon-clipping
+  }
+
   const polyA = toPolygon(a)
   const polyB = toPolygon(b)
   if (!polyA || !polyB) return null
