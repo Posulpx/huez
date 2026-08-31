@@ -9,10 +9,10 @@ it with new primitives without fighting the core.
 
 ## Features
 
-- **Engine core** — a scene graph, a DPR-aware `CanvasRenderer`, and shared style types.
-- **Element modules** — `TextElement` (dynamic text), `ShapeElement` (rectangle, ellipse, line), and `ArtboardElement` containers that clip assigned elements. Drop an element on an artboard to contain it; drop it outside to free it (also assignable via the properties panel).
-- **Tool modules** — `SelectTool`, `ShapeTool` (drag-to-draw), and `TextTool`, driven through a `ToolManager`.
-- **UI shell** — a left **tool palette**, a right **properties sidebar** (fill, stroke, opacity, drop shadow, text content), and a floating **Activity console** that live-streams tool lifecycle + API-call events.
+- **Engine core** — scene graph, DPR-aware `CanvasRenderer` (selection overlay, pen node awareness, marquee), `TransformHandles`, 9-point `anchor` relative to artboard, `shapeToPath` (KAPPA), `booleanOps` (Add/Subtract/Intersect via `polygon-clipping` + `paper.js` bezier-preserving).
+- **Element modules** — `TextElement` (tight ink, multiline, in-line editing), `ShapeElement` (rect/ellipse/line), `ArtboardElement` (label band + edge hit, clips children, 18px label), `PathElement` (cubic Bézier `PathAnchor` `hIn`/`hOut`, open/closed, drafting `resumeEnd`/`closingTarget`/`closingHover`, `hitAnchor`/`closestSegmentInfo`, `flatten` 16–24 steps).
+- **Tool modules** — `SelectTool` (select/scale/rotate, artboard-aware, marquee), `ShapeTool`/`TextTool`/`ArtboardTool`/`PanTool`, `PenTool` (Bézier pen: open/close, symmetrical `Ctrl` opposite + `Alt` single, artboard auto-assign, node awareness, connect-any-open, proximity highlight).
+- **UI shell** — 5-col grid (`180px | 180px | 1fr | 220px | 280px`): left **tool palette** (collapsible Geometry/Interaction/Workspace) + **boolean panel** next to workspace, center **stage** canvas, right **layers** + **properties** sidebar (fill/stroke/opacity/rotation/shadow, artboard/anchor, Convert to Path), floating **Activity console** + **TextEditor** overlay + **PathEditor** vertex editing.
 - Strict **TypeScript 6** with `verbatimModuleSyntax` and isolated modules.
 
 ## Getting started
@@ -29,40 +29,59 @@ npm run preview  # preview the production build
 ```
 src/
 ├─ engine/              # rendering core (no DOM-tooling dependencies)
-│  ├─ types.ts          # Point, Bounds, ElementStyle, ShadowStyle
-│  ├─ BaseElement.ts    # transform + style + hit-testing base class
-│  ├─ Scene.ts          # scene graph, selection, change subscriptions
-│  └─ CanvasRenderer.ts # DPR-aware rendering + selection overlay
+│  ├─ types.ts          # Point, Bounds, ElementStyle, ShadowStyle, ShapeKind
+│  ├─ BaseElement.ts    # transform + style + hit-testing + artboardId/anchor/rotation
+│  ├─ Scene.ts          # scene graph, selection, z-order, artboardAtPoint, replace
+│  ├─ CanvasRenderer.ts # DPR-aware rendering + selection overlay + pen node awareness
+│  ├─ TransformHandles.ts
+│  ├─ anchor.ts         # 9-point artboard anchoring
+│  ├─ shapeToPath.ts    # primitive → PathElement (KAPPA ellipse)
+│  ├─ booleanOps.ts     # Add/Subtract/Intersect (polygon-clipping + paper.js)
+│  └─ booleanOpsPaper.ts# paper.js bezier-preserving boolean
 ├─ elements/            # the "tool modules" (extend BaseElement)
-│  ├─ TextElement.ts
-│  └─ ShapeElement.ts
+│  ├─ ArtboardElement.ts
+│  ├─ TextElement.ts    # tight ink bounds, multiline, editing flag
+│  ├─ ShapeElement.ts   # rect/ellipse/line
+│  ├─ PathElement.ts    # Bézier path (PathAnchor hIn/hOut, drafting, closingTarget/Hover)
+│  └─ index.ts
 ├─ tools/               # pointer-driven tools
-│  ├─ Tool.ts           # Tool + ToolContext interfaces
-│  ├─ ToolManager.ts
-│  ├─ SelectTool.ts
-│  ├─ ShapeTool.ts
-│  └─ TextTool.ts
+│  ├─ Tool.ts           # Tool + ToolContext (shiftKey/altKey/ctrlKey)
+│  ├─ ToolManager.ts    # register/unregister, makeContext with ctrlKey
+│  ├─ SelectTool.ts     # select/scale/rotate, artboard-aware
+│  ├─ ShapeTool.ts      # rect/ellipse/line + artboard auto-assign
+│  ├─ TextTool.ts       # text + artboard auto-assign + TextEditor
+│  ├─ ArtboardTool.ts
+│  ├─ PanTool.ts
+│  ├─ PenTool.ts        # Bézier pen (open/close, handles, node awareness, connect)
+│  ├─ log.ts
+│  └─ records.ts
 └─ ui/
-   ├─ App.ts            # wires engine + tools + panels
-   ├─ ToolPalette.ts    # left tool buttons
-   ├─ PropertiesPanel.ts# right properties sidebar
-   ├─ styles.css
-   └─ main.ts           # bootstrap
+   ├─ App.ts            # wires engine + tools + panels (5-col grid)
+   ├─ ToolPalette.ts    # left tool buttons (collapsible Geometry/Interaction/Workspace)
+   ├─ BooleanPanel.ts   # left boolean panel next to workspace (Add/Subtract/Intersect)
+   ├─ PropertiesPanel.ts# right properties sidebar + Convert to Path
+   ├─ LayerPanel.ts
+   ├─ ActivityPanel.ts
+   ├─ TextEditor.ts
+   ├─ PathEditor.ts     # vertex/handle editing
+   ├─ styles.css        # 5-col grid: palette | boolean | stage | layers | properties
+   └─ main.ts           # bootstrap (palette, boolean, layers, props, activity)
 ```
 
 ## Architecture
 
 ```
-┌─────────────┐   pointer events   ┌──────────────┐   mutates   ┌────────┐
-│     UI      │ ─────────────────▶ │ ToolManager  │ ──────────▶ │ Scene  │
-│ Palette /   │                    │  (active     │             │(graph) │
-│ Properties  │ ◀──── renders ───── │   Tool)      │ ◀─ notify ──│        │
-└─────────────┘                    └──────────────┘             └───┬────┘
-                                                                    │ draws
-                                                            ┌───────▼───────┐
-                                                            │ CanvasRenderer│
-                                                            └───────────────┘
+┌──────────────────────────────────┐   pointer events   ┌──────────────┐   mutates   ┌────────┐
+│     UI (5-col grid)              │ ─────────────────▶ │ ToolManager  │ ──────────▶ │ Scene  │
+│ Palette | Boolean | Stage |      │                    │  (active     │             │(graph) │
+│ Layers | Properties + Activity   │ ◀──── renders ───── │   Tool)      │ ◀─ notify ──│        │
+└──────────────────────────────────┘                    └──────────────┘             └───┬────┘
+                                                                     │ draws
+                                                             ┌───────▼───────┐
+                                                             │ CanvasRenderer│
+                                                             └───────────────┘
 ```
+- Grid: `180px (palette) | 180px (boolean) | 1fr (stage) | 220px (layers) | 280px (properties)` — boolean panel lives next to workspace (left sidebar).
 
 - **`ElementStyle`** maps 1:1 onto Canvas 2D API properties
   (`fillStyle`, `strokeStyle`, `shadowColor`, `shadowBlur`, …), so new style
@@ -103,8 +122,12 @@ of the tool system:
 | `scene` | `Scene` | The scene graph (add/remove/select, z-order, hit-test). |
 | `renderer` | `CanvasRenderer` | Canvas access + `toWorld()` coordinate conversion. |
 | `point` | `Point` | Current pointer position in world coordinates. |
+| `screenPoint` | `Point` | Screen-space point (CSS pixels relative to the canvas). |
 | `start` | `Point \| null` | Pointer position where the current drag began. |
 | `shiftKey` | `boolean` | Modifier state at event time. |
+| `altKey` | `boolean` | Alt/Option — center-pivot, single-handle, etc. |
+| `ctrlKey` | `boolean` | Ctrl/Cmd — opposite-side curve (like closing) for pen. |
+| `setCursor` | `(cursor: string) => void` | Update canvas cursor. |
 | `requestRender` | `() => void` | Ask the host to repaint (call after mutating). |
 
 ### `ToolManager` methods (`src/tools/ToolManager.ts`)
