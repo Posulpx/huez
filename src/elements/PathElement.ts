@@ -33,6 +33,8 @@ export class PathElement extends BaseElement {
   closingTarget: { index: number; kind: 'hIn' | 'hOut' } | null = null
   /** Cursor position captured during closing mode (cursor is null while closing). */
   closingCursor: Point | null = null
+  /** Hover highlight for closing target before click (proximity). */
+  closingHover: { index: number; kind: 'hIn' | 'hOut' } | null = null
 
   constructor(x: number, y: number, style?: Partial<ElementStyle>) {
     super(x, y, { fill: null, stroke: '#1d1d1f', strokeWidth: 2, ...style })
@@ -167,6 +169,18 @@ export class PathElement extends BaseElement {
   /** Anchor squares, handle arms, and a dashed rubber-band to the cursor. */
   private renderDraft(ctx: CanvasRenderingContext2D): void {
     const pts = this.points
+
+    if (this.closingHover && !this.closingTarget) {
+      const hover = pts[this.closingHover.index]!
+      ctx.save()
+      ctx.strokeStyle = '#ff8c00'
+      ctx.lineWidth = 1.5
+      const cs = 6
+      ctx.fillStyle = 'rgba(255, 140, 0, 0.14)'
+      ctx.fillRect(hover.x - cs, hover.y - cs, cs * 2, cs * 2)
+      ctx.strokeRect(hover.x - cs, hover.y - cs, cs * 2, cs * 2)
+      ctx.restore()
+    }
 
     if (this.closingTarget) {
       const target = pts[this.closingTarget.index]!

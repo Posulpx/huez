@@ -200,6 +200,7 @@ export class PenTool implements Tool {
           kind: closeTarget.kind,
         }
         this.path.closingCursor = { x: p.x, y: p.y }
+        this.path.closingHover = null
         ctx.requestRender()
         return
       }
@@ -287,6 +288,43 @@ export class PenTool implements Tool {
       }
       ctx.requestRender()
       return
+    }
+    // Proximity highlight for closing target before click
+    {
+      const scale = ctx.renderer.scale
+      const closeDist = 8 / (scale > 0 ? scale : 1)
+      const first = this.path.points[0]!
+      const last = this.path.points[this.path.points.length - 1]!
+      let hover: { index: number; kind: 'hIn' | 'hOut' } | null = null
+      if (this.path.points.length >= 2) {
+        const dFirst = Math.hypot(ctx.point.x - first.x, ctx.point.y - first.y)
+        if (dFirst <= closeDist) hover = { index: 0, kind: 'hIn' }
+        else {
+          const dLast = Math.hypot(ctx.point.x - last.x, ctx.point.y - last.y)
+          if (dLast <= closeDist)
+            hover = { index: this.path.points.length - 1, kind: 'hOut' }
+        }
+        if (hover) {
+          if (this.resumeEnd === 'start' && hover.index === 0) hover = null
+          else if (
+            this.resumeEnd === 'end' &&
+            hover.index === this.path.points.length - 1
+          )
+            hover = null
+        }
+      }
+      const prev = this.path.closingHover
+      if (
+        (prev?.index ?? -1) !== (hover?.index ?? -1) ||
+        (prev?.kind ?? '') !== (hover?.kind ?? '')
+      ) {
+        this.path.closingHover = hover
+        if (hover) ctx.setCursor('copy')
+        else ctx.setCursor(this.cursor)
+      } else {
+        this.path.closingHover = hover
+        if (hover) ctx.setCursor('copy')
+      }
     }
     this.path.cursor = ctx.point
     if (this.dragging && this.dragStart && this.activeIndex >= 0) {
@@ -393,6 +431,7 @@ export class PenTool implements Tool {
       this.path.resumeEnd = null
       this.path.closingTarget = null
       this.path.closingCursor = null
+      this.path.closingHover = null
     }
     this.path = null
     this.activeIndex = -1
