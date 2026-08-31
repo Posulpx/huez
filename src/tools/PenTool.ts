@@ -302,7 +302,26 @@ export class PenTool implements Tool {
 
   onPointerUp(ctx: ToolContext): void {
     if (this.closing) {
-      // Finish close on mouse up ΓÇö entry handle has been positioned, preserve target handle already done.
+      // Keep curve on orange handle side: flip built handle to its mirror
+      // so final committed curve remains where orange construction was.
+      if (
+        this.closingTargetIndex !== null &&
+        this.closingHandleKind &&
+        this.path
+      ) {
+        const target = this.path.points[this.closingTargetIndex]!
+        if (this.closingHandleKind === 'hIn' && target.hIn) {
+          target.hIn = {
+            x: 2 * target.x - target.hIn.x,
+            y: 2 * target.y - target.hIn.y,
+          }
+        } else if (this.closingHandleKind === 'hOut' && target.hOut) {
+          target.hOut = {
+            x: 2 * target.x - target.hOut.x,
+            y: 2 * target.y - target.hOut.y,
+          }
+        }
+      }
       this.path!.closed = true
       this.path!.closingTarget = null
       this.path!.closingCursor = null
