@@ -419,23 +419,15 @@ export class PenTool implements Tool {
     }
     this.path.cursor = ctx.point
     if (this.dragging && this.dragStart && this.activeIndex >= 0) {
-      // Flipping (mirrored handles) is allowed only for closing paths;
-      // for open-ended paths keep handles unflipped.
-      const isStart = this.resumeEnd === 'start'
-      if (isStart) {
-        this.path.setHandles(this.activeIndex, null, {
-          x: ctx.point.x,
-          y: ctx.point.y,
-        })
+      // Alt straightens In, Click-Drag straightens Out (opposite);
+      // symmetrical was default for open ends previously, now single-handle.
+      const cursorPt = { x: ctx.point.x, y: ctx.point.y }
+      if (ctx.altKey) {
+        // Alt: straighten In (hIn null, hOut at cursor)
+        this.path.setHandles(this.activeIndex, cursorPt, null)
       } else {
-        this.path.setHandles(
-          this.activeIndex,
-          {
-            x: ctx.point.x,
-            y: ctx.point.y,
-          },
-          null
-        )
+        // Click-Drag: straighten Out (opposite, hIn at cursor, hOut null)
+        this.path.setHandles(this.activeIndex, null, cursorPt)
       }
     }
     ctx.requestRender()
