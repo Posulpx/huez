@@ -152,16 +152,14 @@ export class PathEditor {
       }
     } else if (d.kind === 'hIn') {
       anchor.hIn = { x: stored.x, y: stored.y }
-      // By default angular lock: preserve asymmetry (opposite keeps its length, angle 180°)
-      if (!altKey) {
+      // Angular lock (default): keep opposite collinear (180°) but preserve its length (asymmetry).
+      // Only applies if opposite existed at drag start — otherwise preserve asymmetry (keep null).
+      if (!altKey && this.dragOppositeLen !== null) {
         const vx = stored.x - anchor.x
         const vy = stored.y - anchor.y
         const angle = Math.atan2(vy, vx)
-        const len =
-          this.dragOppositeLen !== null
-            ? this.dragOppositeLen
-            : Math.hypot(vx, vy)
         const oppAngle = angle + Math.PI
+        const len = this.dragOppositeLen
         anchor.hOut = {
           x: anchor.x + Math.cos(oppAngle) * len,
           y: anchor.y + Math.sin(oppAngle) * len,
@@ -169,14 +167,11 @@ export class PathEditor {
       }
     } else if (d.kind === 'hOut') {
       anchor.hOut = { x: stored.x, y: stored.y }
-      if (!altKey) {
+      if (!altKey && this.dragOppositeLen !== null) {
         const vx = stored.x - anchor.x
         const vy = stored.y - anchor.y
         const angle = Math.atan2(vy, vx)
-        const len =
-          this.dragOppositeLen !== null
-            ? this.dragOppositeLen
-            : Math.hypot(vx, vy)
+        const len = this.dragOppositeLen
         const oppAngle = angle + Math.PI
         anchor.hIn = {
           x: anchor.x + Math.cos(oppAngle) * len,
