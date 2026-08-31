@@ -431,12 +431,12 @@ export class PenTool implements Tool {
         // Alt: straighten In (hIn null, hOut at cursor)
         this.path.setHandles(this.activeIndex, cursorPt, null)
       } else {
-        // Neither: default no-curve flip symmetrical
+        // Neither: default symmetrical, mirrored (opposite side from drag)
         const isStart = this.resumeEnd === 'start'
         if (isStart) {
-          this.path.setHandles(this.activeIndex, cursorPt, mirrorPt)
-        } else {
           this.path.setHandles(this.activeIndex, mirrorPt, cursorPt)
+        } else {
+          this.path.setHandles(this.activeIndex, cursorPt, mirrorPt)
         }
       }
     }
