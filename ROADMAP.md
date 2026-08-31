@@ -125,6 +125,11 @@ See `scripts/bump.mjs` and `scripts/check-roadmap.mjs` for the automation.
 ### M9 — Text in-line editing (multiline, steady ink, hidden box) ✅
 - `P28-P30` — tight ink bounds (pixel-perfect, gap removed), multiline (`split('\n')`, per-line metrics, `lineMetrics`), in-line editor (`TextEditor` overlay, `editing` flag, `dblclick` to edit, `TextTool` auto-edit, `CanvasRenderer` hides box when editing).
 
+### M10 — Pen paths: open-end continuation, closing UX & artboard-aware construction ✅
+- `P31` — open-end continuation from any open path, node awareness (`penActive`/`penHover`), `hOut`-based curve preview, `shapeToPath` + `Scene.replace` + "Convert to Path", artboard auto-assign (`artboardAtPoint`), `ToolContext` `ctrlKey` plumbing.
+- `P32` — closing UX: proximity highlight (`closingHover` before click, skips `activeIndex`), orange `closingTarget` highlight + dashed mirror construction (`2*anchor - handle`), opposite-side curve via `2*anchor - handle` in `render`, flipped handle on commit to keep orange side, `closingCursor` rubber-band.
+- `P33` — open-end handles: `Ctrl` in-curve/out-straight (opposite side like closing, `hIn@mirror`), `Alt` straighten `In` (`hOut@cursor`), neither symmetrical (`isStart` aware mirrored), flipping allowed on closing not on open, connect-any-open via `findOpenEndpointNear` + `reversePts` (swap `hIn`/`hOut`) merge.
+
 ---
 
 ## Progress Log
@@ -436,6 +441,28 @@ work by area; this log is the plain-English change history.
 - `src/engine/CanvasRenderer.ts:60` — `drawSelectionOverlay` skips `if (el instanceof TextElement && el.editing) continue` — caret (in DOM) does not affect canvas bounds.
 - `src/ui/styles.css:60` — `.text-editor` absolute, `background rgba(15,17,21,0.92)`, `border accent`, `caret-color accent`, `min-width/height`, `z-index 10`.
 - Verified `npx tsc --noEmit`, `prettier --check`, `vite build` (62.70 kB), manual: double-click text → textarea at same world pos, type multiline (Enter = newline), bounds hidden, pan/zoom keeps overlay aligned, ink steady.
+
+### P31 — Pen tool: open-end continuation, node awareness & curve preview ✅
+- `minor` bump `0.3.0 → 0.4.0` via `scripts/bump.mjs minor` (2026-09-01).
+- `src/elements/PathElement.ts:30` — `resumeEnd: 'start'|'end'|null` for open-end preview; `renderDraft` draws `hOut`-based Bézier preview (`last.hOut` → cursor or `cursor → first.hIn` for start) with `[4,4]` dash.
+- `src/tools/PenTool.ts:42` — `findOpenEndpointNear(p,scale,scene)` scans all open `PathElement` (skips `closed`/`drafting`), `8/scale` threshold, returns nearest `{path,index}`; `hoveredEndpoint` + `resumeEnd` + `resumeSnapshot` for cancel; `onPointerDown` resumes any open path (not just selected) via `cand.resumeEnd`, `onPointerMove` node awareness sets `renderer.setPenHover`/`setPenActive` and `copy` cursor; `addAnchor` respects `resumeEnd` (prepend vs append).
+- `src/engine/CanvasRenderer.ts:25` — `penActive`/`penHover` + `drawPenNodeAwareness` (5px `isStart` tinted, 7px orange hover with outer ring, skips `drafting`/`closed`).
+- `src/engine/Scene.ts:179` — `replace(oldEl,newEl)` preserving z-order/selection; `src/engine/shapeToPath.ts:17` — `shapeToPath` converts `ShapeElement` (rect/ellipse/line) to `PathElement` with `artboardId` preserved; `src/ui/PropertiesPanel.ts:56` — "Convert to Path" button for `ShapeElement`.
+- `src/ui/App.ts:22` — `ToolContext` now includes `ctrlKey` (`e.ctrlKey||e.metaKey`) threaded `App → ToolManager → PenTool` for handle modifiers.
+- Artboard auto-assign: `PenTool` `onPointerDown` new path does `scene.artboardAtPoint(p)` → `path.artboardId` (free otherwise), mirroring `ShapeTool`/`TextTool`.
+- Verified `tsc --noEmit`, `vite build` (82–83 kB), manual: pen highlights any open endpoint, click near continues, rubber-band curve preview follows `hOut`.
+
+### P32 — Closing UX: proximity highlight, construction mirror & opposite-side curve ✅
+- `src/elements/PathElement.ts:32` — `closingTarget {index,kind}`, `closingCursor`, `closingHover`; `render` closing segment uses `2*anchor - handle` mirror when `closingTarget` set (flipped preview on orange side), `renderDraft` draws `8px` orange `closingTarget` highlight (`rgba(255,140,0,0.2)`), dashed `4,4` mirror construction line (`2*target - builtHandle` + `3px` dot `rgba(255,140,0,0.4)`), and `4,4` rubber-band via `closingCursor`.
+- `src/tools/PenTool.ts:136` — `closing` state preserves `closingOrigin` opposite handle, sets `path.closed=true` + `closingTarget`/`closingCursor` on click near endpoint (`8/scale`, skips `resumeEnd` origin), `onPointerMove` updates `closingCursor` and built handle (`hIn`/`hOut` at cursor with `3/scale` threshold), `onPointerUp` flips built handle to mirror (`2*target - handle`) so final curve stays on orange side, then `finish()`.
+- Proximity highlight before click: `PathElement.closingHover` + `PenTool` `onPointerMove` sets `closingHover` within `8/scale` of `first`/`last` (skips `activeIndex`/`resumeEnd`), drawn as `6px` `rgba(255,140,0,0.14)` square in `renderDraft`; active origin not highlighted.
+- Verified `tsc --noEmit`, `vite build` (83.73 kB), manual: hover near closing node shows orange proximity highlight, click-drag shows orange dashed mirror and curve on opposite side, release keeps curve on orange side.
+
+### P33 — Pen open-end handles: symmetrical default, Alt/Ctrl modifiers & connect-any-open ✅
+- `src/tools/PenTool.ts:420` — open-end handles: `Ctrl` like closing (curve on opposite side, `in-curve`/`out-straight` via `hIn@mirror` + `hOut null`), `Alt` straightens `In` (`hOut@cursor`, `hIn null`), neither falls back to symmetrical (`isStart ? hOut@cursor/hIn@mirror : hOut@mirror/hIn@cursor` with `mirror = 2*dragStart - cursor`), mirrored only for open ends when `Ctrl`/`neither` (flipping allowed on closing, not on open per `PathElement` render mirror).
+- `src/tools/PenTool.ts:188` — `findOpenEndpointNear` reuse for **connect any open-ended paths**: `onPointerDown` after `closeTarget` checks `otherHit !== this.path`, merges via `copyPt`/`reversePts` (swap `hIn`/`hOut` on reverse), `merged = reverse(other)+this` or `other+this` or `this+other` or `this+reverse(other)` per `thisIsStart`/`otherIsStart`, updates `points`/`resumeEnd`/`activeIndex`, `scene.remove(other)`, selects merged, `penHover`/`closingHover` cleared; `onPointerMove` also highlights other open endpoints via `setPenHover` + `copy` cursor while drafting.
+- Verified `tsc --noEmit`, `vite build` (83.67 kB), manual: Ctrl-drag opposite side, Alt single, click-drag symmetrical; pen connects any two open paths on click near other endpoint, highlights on proximity.
+
 ## Known Limitations
 - ✅ Resizing / rotating an **artboard** now re-anchors its assigned children
   (see M6) — this closes the old "children don't follow the artboard" gap.
