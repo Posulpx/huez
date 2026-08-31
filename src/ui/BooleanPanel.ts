@@ -2,9 +2,10 @@ import type { Scene } from '../engine/Scene'
 import { booleanOp } from '../engine/booleanOps'
 
 /**
- * Left-sidebar boolean operation panel. Shows Add / Subtract / Intersect
- * when exactly 2 closed shapes/paths are selected; otherwise shows a hint.
- * Lives in its own panel below the tool palette.
+ * Boolean operation panel next to the workspace. Shows Add / Subtract /
+ * Intersect when exactly 2 closed shapes/paths are selected; otherwise
+ * shows a hint. Lives in its own left-sidebar column beside the
+ * tool palette (workspace group).
  */
 export class BooleanPanel {
   private container: HTMLElement

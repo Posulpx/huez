@@ -37,7 +37,8 @@ export class App {
     paletteRoot: HTMLElement,
     layersRoot: HTMLElement,
     propsRoot: HTMLElement,
-    activityRoot: HTMLElement
+    activityRoot: HTMLElement,
+    booleanRoot: HTMLElement
   ) {
     this.renderer = new CanvasRenderer(canvas)
     this.tools = new ToolManager(this.scene, this.renderer, () => this.render())
@@ -69,8 +70,8 @@ export class App {
       },
       'select'
     )
-    // Boolean panel lives in left sidebar below the tool palette
-    new BooleanPanel(paletteRoot, this.scene, () => this.render())
+    // Boolean panel lives next to workspace (left sidebar, own column)
+    new BooleanPanel(booleanRoot, this.scene, () => this.render())
     new LayerPanel(layersRoot, this.scene, () => this.render())
     new PropertiesPanel(propsRoot, this.scene, () => this.render())
     new ActivityPanel(activityRoot)
