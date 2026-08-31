@@ -206,6 +206,68 @@ export class PenTool implements Tool {
       }
     }
 
+    // Connect to any other open-ended path if near its endpoint
+    const otherHit = this.findOpenEndpointNear(p, ctx.renderer.scale, ctx.scene)
+    if (otherHit && otherHit.path !== this.path) {
+      const other = otherHit.path
+      const thisIsStart = this.resumeEnd === 'start'
+      const otherIsStart = otherHit.index === 0
+      const copyPt = (pt: (typeof other.points)[number]) => ({
+        x: pt.x,
+        y: pt.y,
+        hIn: pt.hIn ? { x: pt.hIn.x, y: pt.hIn.y } : null,
+        hOut: pt.hOut ? { x: pt.hOut.x, y: pt.hOut.y } : null,
+      })
+      const reversePts = (pts: typeof other.points) =>
+        [...pts].reverse().map((pt) => ({
+          x: pt.x,
+          y: pt.y,
+          hIn: pt.hOut ? { x: pt.hOut.x, y: pt.hOut.y } : null,
+          hOut: pt.hIn ? { x: pt.hIn.x, y: pt.hIn.y } : null,
+        }))
+      let merged: typeof this.path.points
+      let newActiveIndex: number
+      let newResumeEnd: 'start' | 'end'
+      if (thisIsStart) {
+        if (otherIsStart) {
+          merged = [...reversePts(other.points), ...this.path.points]
+          newActiveIndex = 0
+          newResumeEnd = 'start'
+        } else {
+          merged = [...other.points.map(copyPt), ...this.path.points]
+          newActiveIndex = 0
+          newResumeEnd = 'start'
+        }
+      } else {
+        if (otherIsStart) {
+          merged = [...this.path.points, ...other.points.map(copyPt)]
+          newActiveIndex = merged.length - 1
+          newResumeEnd = 'end'
+        } else {
+          merged = [...this.path.points, ...reversePts(other.points)]
+          newActiveIndex = merged.length - 1
+          newResumeEnd = 'end'
+        }
+      }
+      this.path.points = merged
+      this.path.resumeEnd = newResumeEnd
+      this.resumeEnd = newResumeEnd
+      this.activeIndex = newActiveIndex
+      this.path.closingHover = null
+      this.path.closingTarget = null
+      this.path.closingCursor = null
+      ctx.scene.remove(other)
+      this.path.cursor =
+        newActiveIndex === 0
+          ? { x: merged[0]!.x, y: merged[0]!.y }
+          : { x: merged[merged.length - 1]!.x, y: merged[merged.length - 1]!.y }
+      this.dragging = false
+      this.dragStart = null
+      ctx.scene.select(this.path, false)
+      ctx.requestRender()
+      return
+    }
+
     // Otherwise add another anchor.
     if (this.resumeEnd === 'start') {
       // Prepend at beginning
@@ -325,6 +387,31 @@ export class PenTool implements Tool {
       } else {
         this.path.closingHover = hover
         if (hover) ctx.setCursor('copy')
+      }
+    }
+    // Highlight any other open-ended path for connection
+    const otherHit = this.findOpenEndpointNear(
+      ctx.point,
+      ctx.renderer.scale,
+      ctx.scene
+    )
+    if (otherHit && otherHit.path !== this.path) {
+      ;(
+        ctx.renderer as unknown as { setPenHover: (h: unknown) => void }
+      ).setPenHover({ pathId: otherHit.path.id, index: otherHit.index })
+      if (this.path.closingHover) this.path.closingHover = null
+      ctx.setCursor('copy')
+    } else {
+      // No other path nearby — clear connection hover, keep closingHover as is
+      const hasClosingHover = this.path.closingHover !== null
+      if (!hasClosingHover) {
+        ;(
+          ctx.renderer as unknown as { setPenHover: (h: unknown) => void }
+        ).setPenHover(null)
+      } else {
+        ;(
+          ctx.renderer as unknown as { setPenHover: (h: unknown) => void }
+        ).setPenHover(null)
       }
     }
     this.path.cursor = ctx.point
