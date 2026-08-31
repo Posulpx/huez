@@ -43,6 +43,7 @@ export class PenTool implements Tool {
 
     // Close the path if we click near the first anchor (with >= 2 points).
     // Allow handle positioning until mouse up — preserve target node's existing handle.
+    // Draw curve preview based on the last anchor's established hOut and the entry handle (first.hIn) at cursor.
     const scale = ctx.renderer.scale
     const closeDist = 8 / (scale > 0 ? scale : 1)
     const first = this.path.points[0]!
@@ -50,7 +51,7 @@ export class PenTool implements Tool {
     if (this.path.points.length >= 2) {
       const d = Math.hypot(p.x - firstWorld.x, p.y - firstWorld.y)
       if (d <= closeDist) {
-        // Enter closing-drag mode: keep path open until mouse up so the entry handle (first.hIn) can be positioned.
+        // Enter closing-drag mode: preview closed shape immediately (based on last.hOut), allow entry handle (first.hIn) positioning until mouse up.
         // Preserve target node's outgoing handle (first.hOut) — only first.hIn is driven by the drag.
         this.closing = true
         this.dragging = true
@@ -60,7 +61,9 @@ export class PenTool implements Tool {
           hIn: first.hIn ? { x: first.hIn.x, y: first.hIn.y } : null,
           hOut: first.hOut ? { x: first.hOut.x, y: first.hOut.y } : null,
         }
-        this.path.cursor = p
+        // Preview closed curve immediately — hOut of last anchor is already established, first.hIn will track cursor
+        this.path.closed = true
+        this.path.cursor = null
         ctx.requestRender()
         return
       }
@@ -76,10 +79,10 @@ export class PenTool implements Tool {
 
   onPointerMove(ctx: ToolContext): void {
     if (!this.path) return
-    this.path.cursor = ctx.point
-    if (this.dragging && this.dragStart && this.activeIndex >= 0) {
-      if (this.closing) {
-        // Closing drag: position entry handle (first.hIn) at cursor, preserve target node's hOut.
+    if (this.closing) {
+      // Preview closed curve directly — no rubber band; entry handle tracks cursor
+      this.path.cursor = null
+      if (this.dragging && this.dragStart && this.activeIndex >= 0) {
         const first = this.path.points[0]!
         const cursor = { x: ctx.point.x, y: ctx.point.y }
         const scale = ctx.renderer.scale
@@ -94,24 +97,26 @@ export class PenTool implements Tool {
             : null
         }
         if (dist < thresh) {
-          // No drag — keep original entry handle (preserve target node's handle fully)
           if (this.closingOrigin) {
             first.hIn = this.closingOrigin.hIn
               ? { x: this.closingOrigin.hIn.x, y: this.closingOrigin.hIn.y }
               : null
           }
         } else {
-          // Drive entry handle to cursor
           first.hIn = cursor
         }
-      } else {
-        const out = { x: ctx.point.x, y: ctx.point.y }
-        const inn = {
-          x: this.dragStart.x * 2 - ctx.point.x,
-          y: this.dragStart.y * 2 - ctx.point.y,
-        }
-        this.path.setHandles(this.activeIndex, out, inn)
       }
+      ctx.requestRender()
+      return
+    }
+    this.path.cursor = ctx.point
+    if (this.dragging && this.dragStart && this.activeIndex >= 0) {
+      const out = { x: ctx.point.x, y: ctx.point.y }
+      const inn = {
+        x: this.dragStart.x * 2 - ctx.point.x,
+        y: this.dragStart.y * 2 - ctx.point.y,
+      }
+      this.path.setHandles(this.activeIndex, out, inn)
     }
     ctx.requestRender()
   }
