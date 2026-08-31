@@ -424,19 +424,15 @@ export class PenTool implements Tool {
         x: this.dragStart.x * 2 - ctx.point.x,
         y: this.dragStart.y * 2 - ctx.point.y,
       }
-      const isStart = this.resumeEnd === 'start'
       if (ctx.ctrlKey) {
-        // Ctrl: like closing — curve on opposite side
-        if (isStart) {
-          this.path.setHandles(this.activeIndex, mirrorPt, cursorPt)
-        } else {
-          this.path.setHandles(this.activeIndex, cursorPt, mirrorPt)
-        }
+        // Ctrl: in-curve and out-straight, like closing (opposite side)
+        this.path.setHandles(this.activeIndex, null, mirrorPt)
       } else if (ctx.altKey) {
         // Alt: straighten In (hIn null, hOut at cursor)
         this.path.setHandles(this.activeIndex, cursorPt, null)
       } else {
-        // Neither: normal symmetrical
+        // Neither: default no-curve flip symmetrical
+        const isStart = this.resumeEnd === 'start'
         if (isStart) {
           this.path.setHandles(this.activeIndex, cursorPt, mirrorPt)
         } else {
