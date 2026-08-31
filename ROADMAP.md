@@ -128,7 +128,10 @@ See `scripts/bump.mjs` and `scripts/check-roadmap.mjs` for the automation.
 ### M10 — Pen paths: open-end continuation, closing UX & artboard-aware construction ✅
 - `P31` — open-end continuation from any open path, node awareness (`penActive`/`penHover`), `hOut`-based curve preview, `shapeToPath` + `Scene.replace` + "Convert to Path", artboard auto-assign (`artboardAtPoint`), `ToolContext` `ctrlKey` plumbing.
 - `P32` — closing UX: proximity highlight (`closingHover` before click, skips `activeIndex`), orange `closingTarget` highlight + dashed mirror construction (`2*anchor - handle`), opposite-side curve via `2*anchor - handle` in `render`, flipped handle on commit to keep orange side, `closingCursor` rubber-band.
-- `P33` — open-end handles: `Ctrl` in-curve/out-straight (opposite side like closing, `hIn@mirror`), `Alt` straighten `In` (`hOut@cursor`), neither symmetrical (`isStart` aware mirrored), flipping allowed on closing not on open, connect-any-open via `findOpenEndpointNear` + `reversePts` (swap `hIn`/`hOut`) merge.
+- `P33` — open-end handles: `Ctrl` in-curve/out-straight (opposite side like closing, `hIn@mirror` + `hOut null`), `Alt` straighten `In` (`hOut@cursor`, `hIn null`), neither falls back to symmetrical (`isStart` aware mirrored), flipping allowed on closing not on open, connect-any-open via `findOpenEndpointNear` + `reversePts` (swap `hIn`/`hOut`) merge.
+
+### M11 — Simple boolean operands: Add, Subtract, Intersect ✅
+- `P34` — `polygon-clipping` based boolean on closed `ShapeElement`/`PathElement` (flatten 24 steps, `storedToWorld`, closed-ring handling), `Add`/`Subtract`/`Intersect` via `PropertiesPanel` when 2 selected, multi-polygon results as multiple `PathElement`, handles rotation/artboard/style, empty-result handling.
 
 ---
 
@@ -463,6 +466,12 @@ work by area; this log is the plain-English change history.
 - `src/tools/PenTool.ts:188` — `findOpenEndpointNear` reuse for **connect any open-ended paths**: `onPointerDown` after `closeTarget` checks `otherHit !== this.path`, merges via `copyPt`/`reversePts` (swap `hIn`/`hOut` on reverse), `merged = reverse(other)+this` or `other+this` or `this+other` or `this+reverse(other)` per `thisIsStart`/`otherIsStart`, updates `points`/`resumeEnd`/`activeIndex`, `scene.remove(other)`, selects merged, `penHover`/`closingHover` cleared; `onPointerMove` also highlights other open endpoints via `setPenHover` + `copy` cursor while drafting.
 - Verified `tsc --noEmit`, `vite build` (83.67 kB), manual: Ctrl-drag opposite side, Alt single, click-drag symmetrical; pen connects any two open paths on click near other endpoint, highlights on proximity.
 
+### P34 — Simple boolean operands: Add, Subtract, Intersect ✅
+- `minor` bump `0.3.0 → 0.4.0` via `scripts/bump.mjs minor` (2026-09-01).
+- `src/engine/booleanOps.ts:1` — new `booleanOps` using `polygon-clipping` (`union`/`intersection`/`difference`): `toPolygon` flattens `PathElement` (24 steps/segment, `storedToWorld` for rotation, closes ring) or `ShapeElement` via `shapeToPath` (lines excluded, open paths rejected), `polygonToPath` converts outer ring to `PathElement` (corners, `closed=true`, style/artboard from source), `multiPolygonToPaths` for disjoint results, `booleanOp(a,b,op)` handles `MultiPolygon` and empty results.
+- `src/ui/PropertiesPanel.ts:43` — when 2 elements selected, `booleanRow` shows `Add`/`Subtract`/`Intersect` (`union`/`difference`/`intersection` via `booleanOp`), removes originals, adds results (multiple `PathElement` for disjoint unions), selects results, handles empty/null with hint (`Need 2 closed shapes/paths` / `Result empty`).
+- `package.json:10` — added `polygon-clipping@^0.16.0` (3 deps) for robust polygon boolean.
+- Verified `npx tsc --noEmit`, `npm run build` (`vite build` 112.77 kB), manual: select 2 overlapping rects/ellipses/paths → Add merges, Subtract cuts B from A, Intersect keeps overlap, open paths/lines disabled.
 ## Known Limitations
 - ✅ Resizing / rotating an **artboard** now re-anchors its assigned children
   (see M6) — this closes the old "children don't follow the artboard" gap.
