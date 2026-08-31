@@ -207,17 +207,48 @@ export class PathEditor {
     return true
   }
 
-  /** Double-click on an anchor deletes it; returns true if consumed. */
+  /** Double-click: anchor → delete point, handle → collapse that handle (corner). */
   handleDoubleClick(world: Point, scale: number): boolean {
     const path = this.editingPath
     if (!path) return false
     const hit = path.hitAnchor(world, scale)
-    if (hit && hit.kind === 'anchor') {
+    if (!hit) return false
+    if (hit.kind === 'anchor') {
       if (path.points.length <= 2) return true // keep at least 2 points
       path.removeAnchor(hit.index)
       path.editingSelected = -1
       this.drag = null
+      this.dragAnchorStart = null
+      this.dragOppositeLen = null
+      this.dragAngleDiff = null
       this.requestRender()
+      return true
+    }
+    // Collapse handle by double-clicking its handle circle
+    if (hit.kind === 'hIn' || hit.kind === 'hOut') {
+      const a = path.points[hit.index]
+      if (!a) return false
+      if (hit.kind === 'hIn' && a.hIn) {
+        a.hIn = null
+        path.editingSelected = hit.index
+        this.drag = null
+        this.dragAnchorStart = null
+        this.dragOppositeLen = null
+        this.dragAngleDiff = null
+        this.requestRender()
+        return true
+      }
+      if (hit.kind === 'hOut' && a.hOut) {
+        a.hOut = null
+        path.editingSelected = hit.index
+        this.drag = null
+        this.dragAnchorStart = null
+        this.dragOppositeLen = null
+        this.dragAngleDiff = null
+        this.requestRender()
+        return true
+      }
+      // Already collapsed — consume to avoid anchor delete
       return true
     }
     return false
