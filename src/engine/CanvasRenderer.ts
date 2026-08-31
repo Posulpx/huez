@@ -2,6 +2,7 @@ import type { BaseElement } from './BaseElement'
 import type { Scene } from './Scene'
 import { ArtboardElement } from '../elements/ArtboardElement'
 import { TextElement } from '../elements/TextElement'
+import { PathElement } from '../elements/PathElement'
 import { handlePoints, HANDLE_HIT_RADIUS } from './TransformHandles'
 
 /**
@@ -242,6 +243,12 @@ export class CanvasRenderer {
       // In edit mode the text's bounding box is hidden and the caret must not
       // affect it — the DOM textarea is the caret host.
       if (el instanceof TextElement && el.editing) continue
+      // Path in vertex-edit mode draws its own overlay (anchors/handles) instead
+      // of the normal transform box.
+      if (el instanceof PathElement && el.editing) {
+        this.drawPathEditOverlay(el)
+        continue
+      }
       const b = el.bounds
 
       // Selected artboards get an orange label highlight so the move handle is
@@ -313,6 +320,73 @@ export class CanvasRenderer {
         ctx.strokeRect(h.x - 4, h.y - 4, 8, 8)
       }
     }
+    ctx.restore()
+  }
+
+  private drawPathEditOverlay(el: PathElement): void {
+    const { ctx } = this
+    // Draw anchors, handle arms, and handle circles in visual (rotated) space
+    ctx.save()
+    ctx.lineWidth = 1 / this.scale
+    // Also draw a faint outline of the path bounds for context (optional)
+    // Anchor / handle visuals
+    for (let i = 0; i < el.points.length; i++) {
+      const a = el.points[i]!
+      const va = el.storedToWorld({ x: a.x, y: a.y })
+      const isSelected = el.editingSelected === i
+      // Handle arms
+      if (a.hOut) {
+        const vh = el.storedToWorld(a.hOut)
+        ctx.strokeStyle = isSelected ? '#ff8c00' : '#4f8cff'
+        ctx.beginPath()
+        ctx.moveTo(va.x, va.y)
+        ctx.lineTo(vh.x, vh.y)
+        ctx.stroke()
+        ctx.fillStyle = isSelected ? '#ff8c00' : '#4f8cff'
+        ctx.beginPath()
+        ctx.arc(vh.x, vh.y, 4 / this.scale, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.strokeStyle = '#ffffff'
+        ctx.lineWidth = 1 / this.scale
+        ctx.stroke()
+      }
+      if (a.hIn) {
+        const vh = el.storedToWorld(a.hIn)
+        ctx.strokeStyle = isSelected ? '#ff8c00' : '#4f8cff'
+        ctx.beginPath()
+        ctx.moveTo(va.x, va.y)
+        ctx.lineTo(vh.x, vh.y)
+        ctx.stroke()
+        ctx.fillStyle = isSelected ? '#ff8c00' : '#4f8cff'
+        ctx.beginPath()
+        ctx.arc(vh.x, vh.y, 4 / this.scale, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.strokeStyle = '#ffffff'
+        ctx.lineWidth = 1 / this.scale
+        ctx.stroke()
+      }
+      // Anchor square
+      const sz = 6 / this.scale
+      // Outer highlight for selected
+      if (isSelected) {
+        ctx.fillStyle = 'rgba(255,140,0,0.18)'
+        ctx.fillRect(va.x - sz - 2, va.y - sz - 2, sz * 2 + 4, sz * 2 + 4)
+      }
+      ctx.fillStyle = isSelected ? '#ff8c00' : '#ffffff'
+      ctx.strokeStyle = isSelected ? '#ff8c00' : '#4f8cff'
+      ctx.lineWidth = 1.5 / this.scale
+      ctx.fillRect(va.x - sz, va.y - sz, sz * 2, sz * 2)
+      ctx.strokeRect(va.x - sz, va.y - sz, sz * 2, sz * 2)
+    }
+    // Hint text (world space, inverse-scaled font)
+    const b = el.bounds
+    const tip = el.storedToWorld({ x: b.x, y: b.y - 12 / this.scale })
+    ctx.fillStyle = 'rgba(79,140,255,0.95)'
+    ctx.font = `${12 / this.scale}px system-ui, sans-serif`
+    ctx.textBaseline = 'bottom'
+    const msg =
+      'Editing — drag points/handles • click stroke to add • dbl-click point to delete • Enter/Esc to finish'
+    ctx.fillText(msg, tip.x, tip.y)
     ctx.restore()
   }
 

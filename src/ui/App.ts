@@ -14,6 +14,8 @@ import { LayerPanel } from './LayerPanel'
 import { ActivityPanel } from './ActivityPanel'
 import { TextEditor } from './TextEditor'
 import { TextElement } from '../elements/TextElement'
+import { PathEditor } from './PathEditor'
+import { PathElement } from '../elements/PathElement'
 
 /**
  * Top-level application wiring: builds the engine, registers tools,
@@ -25,6 +27,7 @@ export class App {
   private renderer: CanvasRenderer
   private tools: ToolManager
   private textEditor: TextEditor
+  private pathEditor: PathEditor
   private panning = false
   private panLast: { x: number; y: number } | null = null
 
@@ -39,6 +42,9 @@ export class App {
     this.tools = new ToolManager(this.scene, this.renderer, () => this.render())
     const stage = canvas.parentElement as HTMLElement
     this.textEditor = new TextEditor(stage, this.scene, this.renderer, () =>
+      this.render()
+    )
+    this.pathEditor = new PathEditor(this.scene, this.renderer, () =>
       this.render()
     )
 
@@ -56,6 +62,7 @@ export class App {
       (id) => {
         // Commit any in-line text edit before switching tools — keeps ink steady
         if (this.textEditor.isEditing()) this.textEditor.commit()
+        if (this.pathEditor.isEditing()) this.pathEditor.commit()
         this.tools.setActive(id)
         this.render()
       },
@@ -66,6 +73,16 @@ export class App {
     new ActivityPanel(activityRoot)
 
     this.scene.subscribe(() => this.render())
+    // Auto-commit path edit if the edited path is deselected externally
+    this.scene.subscribe(() => {
+      if (
+        this.pathEditor.isEditing() &&
+        this.pathEditor.editing &&
+        !this.scene.isSelected(this.pathEditor.editing)
+      ) {
+        this.pathEditor.commit()
+      }
+    })
     this.bindCanvas()
     this.bindResize()
 
@@ -86,21 +103,50 @@ export class App {
   private bindCanvas(): void {
     const canvas = this.canvas
 
-    // Double-click on a text element enters in-line edit — ink stays steady, box hidden
+    // Double-click enters in-line edit (text) or path vertex edit
     canvas.addEventListener('dblclick', (e) => {
       const world = this.renderer.toWorld(e.clientX, e.clientY)
-      const hit = this.scene.hitTest(world, this.renderer.scale)
+      const scale = this.renderer.scale
+      // If already path-editing, a dblclick on an anchor deletes it
+      if (this.pathEditor.isEditing()) {
+        if (this.pathEditor.handleDoubleClick(world, scale)) {
+          e.preventDefault()
+          this.render()
+          return
+        }
+        // Dblclick elsewhere while editing commits
+        if (this.scene.hitTest(world, scale) instanceof PathElement) {
+          // let the path double-click handling below re-enter if needed
+        } else {
+          // Commit editing on double-click on empty space
+          this.pathEditor.commit()
+          this.render()
+          return
+        }
+      }
+      const hit = this.scene.hitTest(world, scale)
       if (hit instanceof TextElement) {
         e.preventDefault()
+        if (this.pathEditor.isEditing()) this.pathEditor.commit()
         this.scene.select(hit)
         this.textEditor.startEdit(hit)
+        this.render()
+        return
+      }
+      if (hit instanceof PathElement) {
+        // Ignore paths still drafting (pen tool)
+        if (hit.drafting) return
+        e.preventDefault()
+        if (this.textEditor.isEditing()) this.textEditor.commit()
+        this.scene.select(hit)
+        this.pathEditor.startEdit(hit)
         this.render()
       }
     })
 
     // Middle-mouse drag pans the viewport regardless of the active tool.
     canvas.addEventListener('pointerdown', (e) => {
-      // If editing, let the textarea handle it — don't start a canvas drag
+      // If text editing, let the textarea handle it — don't start a canvas drag
       if (this.textEditor.isEditing()) {
         // Click outside the textarea will be handled by TextEditor's stage listener to commit
         // If click is on the canvas while editing a different text, commit first
@@ -109,6 +155,35 @@ export class App {
         if (hit instanceof TextElement && this.textEditor.isEditing(hit)) return
         // Otherwise commit and allow new selection
         this.textEditor.commit()
+      }
+      // Path vertex editing is exclusive — all left-clicks go to the editor
+      if (this.pathEditor.isEditing()) {
+        if (e.button === 0) {
+          const world = this.renderer.toWorld(e.clientX, e.clientY)
+          // Hit anchor/handle or insert on stroke → handled
+          if (this.pathEditor.handlePointerDown(world, this.renderer.scale)) {
+            canvas.setPointerCapture(e.pointerId)
+            e.preventDefault()
+            this.render()
+            return
+          }
+          // Click elsewhere while editing — consume but keep editing (no tool)
+          if (this.pathEditor.editing) {
+            // Click on empty canvas while editing selects anchor if possible,
+            // otherwise stays in edit mode — update selection highlight
+            const path = this.pathEditor.editing
+            if (path) {
+              const hitAnchor = path.hitAnchor(world, this.renderer.scale)
+              if (hitAnchor) {
+                path.editingSelected = hitAnchor.index
+                this.render()
+              }
+            }
+            canvas.setPointerCapture(e.pointerId)
+            e.preventDefault()
+            return
+          }
+        }
       }
       if (e.button === 1) {
         canvas.setPointerCapture(e.pointerId)
@@ -131,6 +206,17 @@ export class App {
         this.render()
         return
       }
+      if (this.pathEditor.isEditing()) {
+        const world = this.renderer.toWorld(e.clientX, e.clientY)
+        if (this.pathEditor.handlePointerMove(world)) {
+          this.render()
+          return
+        }
+        const cur = this.pathEditor.updateCursor(world, this.renderer.scale)
+        if (cur) this.renderer.setCursor(cur)
+        else this.renderer.setCursor('default')
+        return
+      }
       this.tools.pointerMove(e.clientX, e.clientY, e.shiftKey, e.altKey)
     })
 
@@ -138,6 +224,11 @@ export class App {
       if (this.panning) {
         this.panning = false
         this.panLast = null
+        return
+      }
+      if (this.pathEditor.isEditing()) {
+        this.pathEditor.handlePointerUp()
+        this.render()
         return
       }
       this.tools.pointerUp(e.clientX, e.clientY, e.shiftKey, e.altKey)
@@ -156,7 +247,7 @@ export class App {
       { passive: false }
     )
 
-    // Keyboard: forward to the active tool (e.g. Pen tool Enter/Escape).
+    // Keyboard: path editor first, then forward to the active tool (e.g. Pen tool Enter/Escape).
     window.addEventListener('keydown', (e) => {
       const t = e.target as HTMLElement | null
       if (
@@ -166,6 +257,13 @@ export class App {
           t.tagName === 'SELECT')
       ) {
         return
+      }
+      if (this.pathEditor.isEditing()) {
+        if (this.pathEditor.handleKeyDown(e.key)) {
+          e.preventDefault()
+          this.render()
+          return
+        }
       }
       this.tools.keyDown(e.key)
     })

@@ -21,6 +21,10 @@ export class PathElement extends BaseElement {
   points: PathAnchor[] = []
   closed = false
   drafting = false
+  /** When true the path is in vertex-edit mode (double-click). */
+  editing = false
+  /** Index of the currently selected anchor while editing (-1 = none). */
+  editingSelected: number = -1
   /** World-space cursor used for the in-progress rubber-band preview. */
   cursor: Point | null = null
 
@@ -207,6 +211,147 @@ export class PathElement extends BaseElement {
     // A closed path is also grabbable from anywhere inside its filled area.
     if (this.closed && pointInPolygon(p, flat)) return true
     return false
+  }
+
+  /** World <-> stored (unrotated) mapping around the path's rotation center. */
+  worldToStored(p: Point): Point {
+    if (!this.rotation) return { x: p.x, y: p.y }
+    const b = this.bounds
+    const cx = b.x + b.width / 2
+    const cy = b.y + b.height / 2
+    const c = Math.cos(-this.rotation)
+    const s = Math.sin(-this.rotation)
+    const dx = p.x - cx
+    const dy = p.y - cy
+    return { x: dx * c - dy * s + cx, y: dx * s + dy * c + cy }
+  }
+
+  storedToWorld(p: Point): Point {
+    if (!this.rotation) return { x: p.x, y: p.y }
+    const b = this.bounds
+    const cx = b.x + b.width / 2
+    const cy = b.y + b.height / 2
+    const c = Math.cos(this.rotation)
+    const s = Math.sin(this.rotation)
+    const dx = p.x - cx
+    const dy = p.y - cy
+    return { x: dx * c - dy * s + cx, y: dx * s + dy * c + cy }
+  }
+
+  /** Hit-test anchors and handles in visual (rotated) space. */
+  hitAnchor(
+    p: Point,
+    scale = 1
+  ): { index: number; kind: 'anchor' | 'hIn' | 'hOut' } | null {
+    const tolHandle = scale && scale > 0 ? 6 / scale : 6
+    const tolAnchor = scale && scale > 0 ? 8 / scale : 8
+    const b = this.bounds
+    const cx = b.x + b.width / 2
+    const cy = b.y + b.height / 2
+    const rot = this.rotation
+    const toVisual = (pt: Point): Point => {
+      if (!rot) return pt
+      const c = Math.cos(rot)
+      const s = Math.sin(rot)
+      const dx = pt.x - cx
+      const dy = pt.y - cy
+      return { x: dx * c - dy * s + cx, y: dx * s + dy * c + cy }
+    }
+    // Handles first (smaller target on top)
+    for (let i = 0; i < this.points.length; i++) {
+      const a = this.points[i]!
+      if (a.hIn) {
+        const vh = toVisual(a.hIn)
+        if (Math.hypot(p.x - vh.x, p.y - vh.y) <= tolHandle)
+          return { index: i, kind: 'hIn' }
+      }
+      if (a.hOut) {
+        const vh = toVisual(a.hOut)
+        if (Math.hypot(p.x - vh.x, p.y - vh.y) <= tolHandle)
+          return { index: i, kind: 'hOut' }
+      }
+    }
+    for (let i = 0; i < this.points.length; i++) {
+      const a = this.points[i]!
+      const va = toVisual({ x: a.x, y: a.y })
+      if (Math.hypot(p.x - va.x, p.y - va.y) <= tolAnchor)
+        return { index: i, kind: 'anchor' }
+    }
+    return null
+  }
+
+  /** Find the closest segment (for insertion) and the projected point. */
+  closestSegmentInfo(
+    p: Point,
+    scale = 1
+  ): { segmentIndex: number; projected: Point } | null {
+    if (this.points.length < 1) return null
+    if (this.points.length === 1) return { segmentIndex: 0, projected: p }
+    const tol = scale && scale > 0 ? 8 / scale : 8
+    const flat = this.flatten()
+    const steps = 16
+    const b = this.bounds
+    const cx = b.x + b.width / 2
+    const cy = b.y + b.height / 2
+    const rot = this.rotation
+    const toVisual = (pt: Point): Point => {
+      if (!rot) return pt
+      const c = Math.cos(rot)
+      const s = Math.sin(rot)
+      const dx = pt.x - cx
+      const dy = pt.y - cy
+      return { x: dx * c - dy * s + cx, y: dx * s + dy * c + cy }
+    }
+    let bestDist = Infinity
+    let bestSeg = 0
+    let bestProj: Point = p
+    for (let i = 0; i < flat.length - 1; i++) {
+      const a = toVisual(flat[i]!)
+      const b2 = toVisual(flat[i + 1]!)
+      const d = distToSegment(p, a, b2)
+      if (d < bestDist) {
+        bestDist = d
+        bestSeg = Math.floor(i / steps)
+        const dx = b2.x - a.x
+        const dy = b2.y - a.y
+        const len2 = dx * dx + dy * dy
+        let t = len2 === 0 ? 0 : ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2
+        t = Math.max(0, Math.min(1, t))
+        bestProj = { x: a.x + dx * t, y: a.y + dy * t }
+      }
+    }
+    if (bestDist > tol) return null
+    // Clamp to valid gap index
+    const maxSeg = this.closed ? this.points.length - 1 : this.points.length - 2
+    let seg = Math.max(0, Math.min(bestSeg, maxSeg))
+    if (seg < 0) seg = 0
+    return { segmentIndex: seg, projected: bestProj }
+  }
+
+  /** Insert a new anchor at a visual world point, between segmentIndex segments. */
+  insertAnchorAtVisual(world: Point, segmentIndex: number): number {
+    const stored = this.worldToStored(world)
+    const idx = Math.min(segmentIndex + 1, this.points.length)
+    // Insert after `segmentIndex` (so for closing gap push to end)
+    if (this.closed && segmentIndex === this.points.length - 1) {
+      this.points.push({ x: stored.x, y: stored.y, hIn: null, hOut: null })
+      return this.points.length - 1
+    }
+    this.points.splice(idx, 0, {
+      x: stored.x,
+      y: stored.y,
+      hIn: null,
+      hOut: null,
+    })
+    return idx
+  }
+
+  removeAnchor(index: number): void {
+    if (index < 0 || index >= this.points.length) return
+    this.points.splice(index, 1)
+    if (this.editingSelected >= this.points.length) this.editingSelected = -1
+    else if (this.editingSelected === index) this.editingSelected = -1
+    else if (this.editingSelected > index) this.editingSelected--
   }
 
   /** Sample the Bézier path into a polyline of world-space points. */
