@@ -1,8 +1,10 @@
 import type { Scene } from '../engine/Scene'
 import type { BaseElement } from '../engine/BaseElement'
 import { TextElement } from '../elements/TextElement'
+import { ShapeElement } from '../elements/ShapeElement'
 import { ArtboardElement } from '../elements/ArtboardElement'
 import { setElementAnchor } from '../engine/anchor'
+import { shapeToPath } from '../engine/shapeToPath'
 import type { AnchorPoint, ElementStyle } from '../engine/types'
 
 /**
@@ -48,6 +50,10 @@ export class PropertiesPanel {
 
     const el = selected[0]!
     this.buildCommon(el)
+
+    if (el instanceof ShapeElement) {
+      this.root.appendChild(this.convertRow(el))
+    }
 
     if (el instanceof TextElement) {
       this.buildText(el)
@@ -404,6 +410,28 @@ export class PropertiesPanel {
     }
 
     wrap.appendChild(grid)
+    return wrap
+  }
+
+  private convertRow(el: ShapeElement): HTMLElement {
+    const wrap = document.createElement('div')
+    wrap.className = 'prop-row'
+    const btn = document.createElement('button')
+    btn.className = 'mini-btn'
+    btn.textContent = 'Convert to Path'
+    btn.title = 'Convert primitive to editable path'
+    btn.addEventListener('click', () => {
+      const path = shapeToPath(el)
+      this.scene.replace(el, path)
+      this.scene.select(path)
+      this.requestRender()
+    })
+    wrap.appendChild(btn)
+    const hint = document.createElement('span')
+    hint.className = 'hint'
+    hint.textContent = 'Editable path'
+    hint.style.marginLeft = '8px'
+    wrap.appendChild(hint)
     return wrap
   }
 }

@@ -182,6 +182,22 @@ export class Scene {
     this.emit()
   }
 
+  /** Replace `oldEl` with `newEl` at the same z-order, preserving selection. */
+  replace(oldEl: BaseElement, newEl: BaseElement): void {
+    const idx = this.elements.indexOf(oldEl)
+    if (idx < 0) {
+      this.add(newEl)
+      return
+    }
+    const wasSelected = this.selectedIds.has(oldEl.id)
+    this.elements.splice(idx, 1, newEl)
+    if (wasSelected) {
+      this.selectedIds.delete(oldEl.id)
+      this.selectedIds.add(newEl.id)
+    }
+    this.emit()
+  }
+
   // --------------------------------------------------------------------
 
   /**

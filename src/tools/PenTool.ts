@@ -23,12 +23,54 @@ export class PenTool implements Tool {
   private dragStart: Point | null = null
   private closing = false
   private closingOrigin: { hIn: Point | null; hOut: Point | null } | null = null
+  private resumeSnapshot: {
+    points: import('../elements/PathElement').PathAnchor[]
+    closed: boolean
+  } | null = null
 
   onPointerDown(ctx: ToolContext): void {
     const p = ctx.point
 
-    // Start a new path.
+    // Start a new path, or resume an open-ended selected path from its end.
     if (!this.path) {
+      // Try resume open-ended path: if a single open path is selected and click is near its last anchor, continue it.
+      const sel = ctx.scene.selected
+      if (
+        sel.length === 1 &&
+        sel[0] instanceof PathElement &&
+        !(sel[0] as PathElement).closed &&
+        !(sel[0] as PathElement).drafting
+      ) {
+        const cand = sel[0] as PathElement
+        if (cand.points.length >= 1) {
+          const scale = ctx.renderer.scale
+          const thresh = 8 / (scale > 0 ? scale : 1)
+          const last = cand.points[cand.points.length - 1]!
+          const lastVis = cand.storedToWorld({ x: last.x, y: last.y })
+          const dLast = Math.hypot(p.x - lastVis.x, p.y - lastVis.y)
+          if (dLast <= thresh) {
+            this.path = cand
+            this.path.drafting = true
+            // Snapshot for cancel (preserve original if user aborts continuation)
+            this.resumeSnapshot = {
+              points: cand.points.map((pt) => ({
+                x: pt.x,
+                y: pt.y,
+                hIn: pt.hIn ? { x: pt.hIn.x, y: pt.hIn.y } : null,
+                hOut: pt.hOut ? { x: pt.hOut.x, y: pt.hOut.y } : null,
+              })),
+              closed: cand.closed,
+            }
+            this.activeIndex = cand.points.length - 1
+            this.dragging = false
+            this.dragStart = null
+            this.path.cursor = p
+            this.path.editing = false
+            ctx.requestRender()
+            return
+          }
+        }
+      }
       const path = new PathElement(p.x, p.y)
       path.drafting = true
       this.activeIndex = path.addAnchor(p)
@@ -152,12 +194,17 @@ export class PenTool implements Tool {
 
   private finish(ctx: ToolContext): void {
     const path = this.path
+    const wasResumed = !!this.resumeSnapshot
     this.reset()
     if (!path) return
     if (path.points.length < 2) {
-      ctx.scene.remove(path)
-      ctx.requestRender()
-      return
+      if (wasResumed) {
+        // Resumed path had original points — keep it, just finish
+      } else {
+        ctx.scene.remove(path)
+        ctx.requestRender()
+        return
+      }
     }
     path.drafting = false
     path.cursor = null
@@ -168,8 +215,23 @@ export class PenTool implements Tool {
 
   private cancel(ctx: ToolContext): void {
     const path = this.path
+    const snapshot = this.resumeSnapshot
     this.reset()
-    if (path) ctx.scene.remove(path)
+    if (!path) {
+      ctx.requestRender()
+      return
+    }
+    if (snapshot) {
+      // Restore resumed path to original state, keep it in scene
+      path.points = snapshot.points
+      path.closed = snapshot.closed
+      path.drafting = false
+      path.cursor = null
+      ctx.scene.select(path, false)
+      ctx.requestRender()
+      return
+    }
+    ctx.scene.remove(path)
     ctx.requestRender()
   }
 
@@ -180,5 +242,6 @@ export class PenTool implements Tool {
     this.dragStart = null
     this.closing = false
     this.closingOrigin = null
+    this.resumeSnapshot = null
   }
 }
