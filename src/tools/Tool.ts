@@ -17,6 +17,8 @@ export interface ToolContext {
   shiftKey: boolean
   /** Alt/Option held — used for center-pivot transforms. */
   altKey: boolean
+  /** Ctrl/Cmd held — used for opposite-side curve construction. */
+  ctrlKey: boolean
   /** Request a repaint — tools call this after mutating the scene. */
   requestRender(): void
   /** Update the canvas cursor (used for hover/transform affordances). */

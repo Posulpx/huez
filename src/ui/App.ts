@@ -199,7 +199,13 @@ export class App {
         return
       }
       canvas.setPointerCapture(e.pointerId)
-      this.tools.pointerDown(e.clientX, e.clientY, e.shiftKey, e.altKey)
+      this.tools.pointerDown(
+        e.clientX,
+        e.clientY,
+        e.shiftKey,
+        e.altKey,
+        e.ctrlKey || e.metaKey
+      )
     })
 
     canvas.addEventListener('pointermove', (e) => {
@@ -223,7 +229,13 @@ export class App {
         else this.renderer.setCursor('default')
         return
       }
-      this.tools.pointerMove(e.clientX, e.clientY, e.shiftKey, e.altKey)
+      this.tools.pointerMove(
+        e.clientX,
+        e.clientY,
+        e.shiftKey,
+        e.altKey,
+        e.ctrlKey || e.metaKey
+      )
     })
 
     canvas.addEventListener('pointerup', (e) => {
@@ -237,7 +249,13 @@ export class App {
         this.render()
         return
       }
-      this.tools.pointerUp(e.clientX, e.clientY, e.shiftKey, e.altKey)
+      this.tools.pointerUp(
+        e.clientX,
+        e.clientY,
+        e.shiftKey,
+        e.altKey,
+        e.ctrlKey || e.metaKey
+      )
     })
 
     // Wheel zooms centered on the cursor.

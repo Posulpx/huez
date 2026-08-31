@@ -419,15 +419,29 @@ export class PenTool implements Tool {
     }
     this.path.cursor = ctx.point
     if (this.dragging && this.dragStart && this.activeIndex >= 0) {
-      // Alt straightens In, Click-Drag straightens Out (opposite);
-      // symmetrical was default for open ends previously, now single-handle.
       const cursorPt = { x: ctx.point.x, y: ctx.point.y }
-      if (ctx.altKey) {
+      const mirrorPt = {
+        x: this.dragStart.x * 2 - ctx.point.x,
+        y: this.dragStart.y * 2 - ctx.point.y,
+      }
+      const isStart = this.resumeEnd === 'start'
+      if (ctx.ctrlKey) {
+        // Ctrl: like closing — curve on opposite side
+        if (isStart) {
+          this.path.setHandles(this.activeIndex, mirrorPt, cursorPt)
+        } else {
+          this.path.setHandles(this.activeIndex, cursorPt, mirrorPt)
+        }
+      } else if (ctx.altKey) {
         // Alt: straighten In (hIn null, hOut at cursor)
         this.path.setHandles(this.activeIndex, cursorPt, null)
       } else {
-        // Click-Drag: straighten Out (opposite, hIn at cursor, hOut null)
-        this.path.setHandles(this.activeIndex, null, cursorPt)
+        // Neither: normal symmetrical
+        if (isStart) {
+          this.path.setHandles(this.activeIndex, cursorPt, mirrorPt)
+        } else {
+          this.path.setHandles(this.activeIndex, mirrorPt, cursorPt)
+        }
       }
     }
     ctx.requestRender()

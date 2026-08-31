@@ -61,7 +61,13 @@ export class ToolManager {
   setActive(id: string): void {
     const next = this.tools.get(id)
     if (!next || next === this.active) return
-    const ctx = this.makeContext({ x: 0, y: 0 }, { x: 0, y: 0 }, false, false)
+    const ctx = this.makeContext(
+      { x: 0, y: 0 },
+      { x: 0, y: 0 },
+      false,
+      false,
+      false
+    )
     this.active?.onDeactivate?.(ctx)
     this.active = next
     this.active.onActivate?.(ctx)
@@ -77,7 +83,8 @@ export class ToolManager {
     point: { x: number; y: number },
     screenPoint: { x: number; y: number },
     shiftKey: boolean,
-    altKey: boolean
+    altKey: boolean,
+    ctrlKey = false
   ): ToolContext {
     return {
       scene: this.scene,
@@ -87,6 +94,7 @@ export class ToolManager {
       start: this.start,
       shiftKey,
       altKey,
+      ctrlKey,
       requestRender: this.requestRender,
       setCursor: (cursor: string) => this.renderer.setCursor(cursor),
     }
@@ -100,14 +108,15 @@ export class ToolManager {
     clientX: number,
     clientY: number,
     shiftKey: boolean,
-    altKey = false
+    altKey = false,
+    ctrlKey = false
   ): void {
     const point = this.renderer.toWorld(clientX, clientY)
     const screenPoint = this.toScreen(clientX, clientY)
     this.start = point
     this.lastPoint = point
     this.lastScreen = screenPoint
-    const ctx = this.makeContext(point, screenPoint, shiftKey, altKey)
+    const ctx = this.makeContext(point, screenPoint, shiftKey, altKey, ctrlKey)
     const tool = this.active
     if (tool) logApiCall(`${tool.id}.onPointerDown`)
     tool?.onPointerDown(ctx)
@@ -117,13 +126,14 @@ export class ToolManager {
     clientX: number,
     clientY: number,
     shiftKey: boolean,
-    altKey = false
+    altKey = false,
+    ctrlKey = false
   ): void {
     const point = this.renderer.toWorld(clientX, clientY)
     const screenPoint = this.toScreen(clientX, clientY)
     this.lastPoint = point
     this.lastScreen = screenPoint
-    const ctx = this.makeContext(point, screenPoint, shiftKey, altKey)
+    const ctx = this.makeContext(point, screenPoint, shiftKey, altKey, ctrlKey)
     this.active?.onPointerMove(ctx)
   }
 
@@ -131,13 +141,14 @@ export class ToolManager {
     clientX: number,
     clientY: number,
     shiftKey: boolean,
-    altKey = false
+    altKey = false,
+    ctrlKey = false
   ): void {
     const point = this.renderer.toWorld(clientX, clientY)
     const screenPoint = this.toScreen(clientX, clientY)
     this.lastPoint = point
     this.lastScreen = screenPoint
-    const ctx = this.makeContext(point, screenPoint, shiftKey, altKey)
+    const ctx = this.makeContext(point, screenPoint, shiftKey, altKey, ctrlKey)
     const tool = this.active
     if (tool) logApiCall(`${tool.id}.onPointerUp`)
     tool?.onPointerUp(ctx)
@@ -146,7 +157,13 @@ export class ToolManager {
 
   /** Forward a keyboard event to the active tool (e.g. Pen tool finishing). */
   keyDown(key: string): void {
-    const ctx = this.makeContext(this.lastPoint, this.lastScreen, false, false)
+    const ctx = this.makeContext(
+      this.lastPoint,
+      this.lastScreen,
+      false,
+      false,
+      false
+    )
     this.active?.onKeyDown?.(ctx, key)
   }
 }
