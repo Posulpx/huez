@@ -21,6 +21,8 @@ export class PenTool implements Tool {
   private activeIndex = -1
   private dragging = false
   private dragStart: Point | null = null
+  private closing = false
+  private closingOrigin: { hIn: Point | null; hOut: Point | null } | null = null
 
   onPointerDown(ctx: ToolContext): void {
     const p = ctx.point
@@ -40,6 +42,7 @@ export class PenTool implements Tool {
     }
 
     // Close the path if we click near the first anchor (with >= 2 points).
+    // Allow handle positioning until mouse up — preserve target node's existing handle.
     const scale = ctx.renderer.scale
     const closeDist = 8 / (scale > 0 ? scale : 1)
     const first = this.path.points[0]!
@@ -47,8 +50,18 @@ export class PenTool implements Tool {
     if (this.path.points.length >= 2) {
       const d = Math.hypot(p.x - firstWorld.x, p.y - firstWorld.y)
       if (d <= closeDist) {
-        this.path.closed = true
-        this.finish(ctx)
+        // Enter closing-drag mode: keep path open until mouse up so the entry handle (first.hIn) can be positioned.
+        // Preserve target node's outgoing handle (first.hOut) — only first.hIn is driven by the drag.
+        this.closing = true
+        this.dragging = true
+        this.dragStart = { x: firstWorld.x, y: firstWorld.y }
+        this.activeIndex = 0
+        this.closingOrigin = {
+          hIn: first.hIn ? { x: first.hIn.x, y: first.hIn.y } : null,
+          hOut: first.hOut ? { x: first.hOut.x, y: first.hOut.y } : null,
+        }
+        this.path.cursor = p
+        ctx.requestRender()
         return
       }
     }
@@ -65,17 +78,55 @@ export class PenTool implements Tool {
     if (!this.path) return
     this.path.cursor = ctx.point
     if (this.dragging && this.dragStart && this.activeIndex >= 0) {
-      const out = { x: ctx.point.x, y: ctx.point.y }
-      const inn = {
-        x: this.dragStart.x * 2 - ctx.point.x,
-        y: this.dragStart.y * 2 - ctx.point.y,
+      if (this.closing) {
+        // Closing drag: position entry handle (first.hIn) at cursor, preserve target node's hOut.
+        const first = this.path.points[0]!
+        const cursor = { x: ctx.point.x, y: ctx.point.y }
+        const scale = ctx.renderer.scale
+        const thresh = 3 / (scale > 0 ? scale : 1)
+        const dist = Math.hypot(
+          cursor.x - this.dragStart.x,
+          cursor.y - this.dragStart.y
+        )
+        if (this.closingOrigin) {
+          first.hOut = this.closingOrigin.hOut
+            ? { x: this.closingOrigin.hOut.x, y: this.closingOrigin.hOut.y }
+            : null
+        }
+        if (dist < thresh) {
+          // No drag — keep original entry handle (preserve target node's handle fully)
+          if (this.closingOrigin) {
+            first.hIn = this.closingOrigin.hIn
+              ? { x: this.closingOrigin.hIn.x, y: this.closingOrigin.hIn.y }
+              : null
+          }
+        } else {
+          // Drive entry handle to cursor
+          first.hIn = cursor
+        }
+      } else {
+        const out = { x: ctx.point.x, y: ctx.point.y }
+        const inn = {
+          x: this.dragStart.x * 2 - ctx.point.x,
+          y: this.dragStart.y * 2 - ctx.point.y,
+        }
+        this.path.setHandles(this.activeIndex, out, inn)
       }
-      this.path.setHandles(this.activeIndex, out, inn)
     }
     ctx.requestRender()
   }
 
-  onPointerUp(_ctx: ToolContext): void {
+  onPointerUp(ctx: ToolContext): void {
+    if (this.closing) {
+      // Finish close on mouse up — entry handle has been positioned, preserve target handle already done.
+      this.path!.closed = true
+      this.closing = false
+      this.closingOrigin = null
+      this.dragging = false
+      this.dragStart = null
+      this.finish(ctx)
+      return
+    }
     // A plain click (no drag) leaves the anchor as a corner; a drag already
     // set its handles during the move. The path stays in draft mode either way.
     this.dragging = false
@@ -122,5 +173,7 @@ export class PenTool implements Tool {
     this.activeIndex = -1
     this.dragging = false
     this.dragStart = null
+    this.closing = false
+    this.closingOrigin = null
   }
 }
