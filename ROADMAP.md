@@ -472,6 +472,11 @@ work by area; this log is the plain-English change history.
 - `src/ui/PropertiesPanel.ts:43` — when 2 elements selected, `booleanRow` shows `Add`/`Subtract`/`Intersect` (`union`/`difference`/`intersection` via `booleanOp`), removes originals, adds results (multiple `PathElement` for disjoint unions), selects results, handles empty/null with hint (`Need 2 closed shapes/paths` / `Result empty`).
 - `package.json:10` — added `polygon-clipping@^0.16.0` (3 deps) for robust polygon boolean.
 - Verified `npx tsc --noEmit`, `npm run build` (`vite build` 112.77 kB), manual: select 2 overlapping rects/ellipses/paths → Add merges, Subtract cuts B from A, Intersect keeps overlap, open paths/lines disabled.
+### P35 — Preserve Bézier handles in boolean, fewer nodes ✅
+- `patch` bump `0.4.0 → 0.4.1` via `scripts/bump.mjs patch` (2026-09-01).
+- `src/engine/booleanOpsPaper.ts:1` — new paper.js based boolean (`toPaperPath` with `storedToWorld` + relative `handleIn`/`handleOut`, `paperPathToPathElement` preserves `hIn`/`hOut`, `extractPaths` handles `CompoundPath`); `src/engine/booleanOps.ts:1` now tries `booleanOpPaper` first (fewer nodes, preserves original Bézier segments) then falls back to `polygon-clipping` (24 steps).
+- `package.json:10` — added `paper@^0.12.18` for handle-preserving boolean; `vite build` 112.77 kB → 357.84 kB (paper) but union of 2 rects now 8 points vs 100+ before, ellipse union preserves curves.
+- Verified `npx tsc --noEmit`, `vite build`, manual: 2 overlapping rects Add → 8-point L-shape (was 100+), ellipse Add preserves handles, Subtract/Intersect correct, open paths still rejected.
 ## Known Limitations
 - ✅ Resizing / rotating an **artboard** now re-anchors its assigned children
   (see M6) — this closes the old "children don't follow the artboard" gap.
