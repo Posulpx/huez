@@ -22,6 +22,10 @@ export class CanvasRenderer {
   private marquee: { x0: number; y0: number; x1: number; y1: number } | null =
     null
 
+  /** Pen node awareness — when pen is active, highlight open endpoints. */
+  private penActive = false
+  private penHover: { pathId: string; index: number } | null = null
+
   private static readonly MIN_SCALE = 0.1
   private static readonly MAX_SCALE = 8
 
@@ -158,6 +162,9 @@ export class CanvasRenderer {
     // Selection overlays are never clipped — bounds/handles stay visible.
     this.drawSelectionOverlay(scene)
 
+    // Pen node awareness — show open endpoints where pen can continue.
+    if (this.penActive) this.drawPenNodeAwareness(scene)
+
     // Rubber-band (marquee) selection rectangle, drawn above everything.
     if (this.marquee) this.drawMarquee()
   }
@@ -167,6 +174,14 @@ export class CanvasRenderer {
     rect: { x0: number; y0: number; x1: number; y1: number } | null
   ): void {
     this.marquee = rect
+  }
+
+  setPenActive(active: boolean): void {
+    this.penActive = active
+  }
+
+  setPenHover(hover: { pathId: string; index: number } | null): void {
+    this.penHover = hover
   }
 
   private drawMarquee(): void {
@@ -183,6 +198,57 @@ export class CanvasRenderer {
     ctx.strokeStyle = '#4f8cff'
     ctx.setLineDash([4 / this.scale, 4 / this.scale])
     ctx.strokeRect(x, y, w, h)
+    ctx.restore()
+  }
+
+  private drawPenNodeAwareness(scene: Scene): void {
+    const { ctx } = this
+    ctx.save()
+    for (const el of scene.all) {
+      if (!(el instanceof PathElement)) continue
+      if (el.closed || el.drafting) continue
+      if (el.points.length === 0) continue
+      // Only endpoints are continuation targets
+      const endpoints = [0, el.points.length - 1]
+      // Avoid double-drawing single-point path
+      const uniq = endpoints[0] === endpoints[1] ? [0] : endpoints
+      for (const idx of uniq) {
+        const pt = el.points[idx]!
+        const vis = el.storedToWorld({ x: pt.x, y: pt.y })
+        const isHovered =
+          this.penHover?.pathId === el.id && this.penHover?.index === idx
+        const isStart = idx === 0
+        if (isHovered) {
+          ctx.fillStyle = '#ff8c00'
+          ctx.strokeStyle = '#ffffff'
+          const sz = 7 / this.scale
+          ctx.lineWidth = 1.5 / this.scale
+          ctx.fillRect(vis.x - sz, vis.y - sz, sz * 2, sz * 2)
+          ctx.strokeRect(vis.x - sz, vis.y - sz, sz * 2, sz * 2)
+          ctx.strokeStyle = '#ff8c00'
+          ctx.lineWidth = 1 / this.scale
+          ctx.strokeRect(
+            vis.x - sz - 2 / this.scale,
+            vis.y - sz - 2 / this.scale,
+            (sz + 2 / this.scale) * 2,
+            (sz + 2 / this.scale) * 2
+          )
+        } else {
+          const sz = 5 / this.scale
+          ctx.fillStyle = isStart ? 'rgba(79,140,255,0.18)' : '#ffffff'
+          ctx.strokeStyle = '#4f8cff'
+          ctx.lineWidth = 1.5 / this.scale
+          ctx.fillRect(vis.x - sz, vis.y - sz, sz * 2, sz * 2)
+          ctx.strokeRect(vis.x - sz, vis.y - sz, sz * 2, sz * 2)
+          if (isStart) {
+            ctx.fillStyle = '#4f8cff'
+            ctx.beginPath()
+            ctx.arc(vis.x, vis.y, 1.6 / this.scale, 0, Math.PI * 2)
+            ctx.fill()
+          }
+        }
+      }
+    }
     ctx.restore()
   }
 

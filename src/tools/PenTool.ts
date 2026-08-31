@@ -9,6 +9,9 @@ import { logApiCall } from './log'
  * first anchor again to close the path. Press Enter to finish an open path
  * (also finishes when you switch tools), Escape to cancel. The path is added
  * to the scene immediately and committed when the gesture ends.
+ *
+ * Node awareness: when active, highlights open endpoints of any open path
+ * where the pen can continue.
  */
 export class PenTool implements Tool {
   readonly id = 'pen'
@@ -23,53 +26,99 @@ export class PenTool implements Tool {
   private dragStart: Point | null = null
   private closing = false
   private closingOrigin: { hIn: Point | null; hOut: Point | null } | null = null
+  private closingTargetIndex: number | null = null
+  private closingHandleKind: 'hIn' | 'hOut' | null = null
   private resumeSnapshot: {
     points: import('../elements/PathElement').PathAnchor[]
     closed: boolean
   } | null = null
+  private hoveredEndpoint: { path: PathElement; index: number } | null = null
+  private resumeEnd: 'start' | 'end' | null = null
+
+  getHoveredEndpoint(): { path: PathElement; index: number } | null {
+    return this.hoveredEndpoint
+  }
+
+  /** Find nearest open endpoint (start or end of any open path) within threshold. */
+  private findOpenEndpointNear(
+    p: Point,
+    scale: number,
+    scene: ToolContext['scene']
+  ): { path: PathElement; index: number } | null {
+    const thresh = 8 / (scale > 0 ? scale : 1)
+    let best: { path: PathElement; index: number; dist: number } | null = null
+    for (const el of scene.all) {
+      if (!(el instanceof PathElement)) continue
+      if (el.closed || el.drafting) continue
+      if (el.points.length === 0) continue
+      const first = el.points[0]!
+      const last = el.points[el.points.length - 1]!
+      const firstVis = el.storedToWorld({ x: first.x, y: first.y })
+      const lastVis = el.storedToWorld({ x: last.x, y: last.y })
+      const dFirst = Math.hypot(p.x - firstVis.x, p.y - firstVis.y)
+      const dLast = Math.hypot(p.x - lastVis.x, p.y - lastVis.y)
+      if (dFirst <= thresh && (!best || dFirst < best.dist)) {
+        best = { path: el, index: 0, dist: dFirst }
+      }
+      if (dLast <= thresh && (!best || dLast < best.dist)) {
+        best = { path: el, index: el.points.length - 1, dist: dLast }
+      }
+    }
+    return best ? { path: best.path, index: best.index } : null
+  }
+
+  onActivate(ctx: ToolContext): void {
+    ctx.renderer.setPenActive(true)
+    this.hoveredEndpoint = null
+    ;(
+      ctx.renderer as unknown as { setPenHover: (h: unknown) => void }
+    ).setPenHover(null)
+  }
+
+  onDeactivate(ctx: ToolContext): void {
+    ctx.renderer.setPenActive(false)
+    ;(
+      ctx.renderer as unknown as { setPenHover: (h: unknown) => void }
+    ).setPenHover(null)
+    this.hoveredEndpoint = null
+    if (this.path) {
+      if (this.path.points.length >= 2) this.finish(ctx)
+      else this.cancel(ctx)
+    }
+  }
 
   onPointerDown(ctx: ToolContext): void {
     const p = ctx.point
 
-    // Start a new path, or resume an open-ended selected path from its end.
+    // Start a new path, or resume an open-ended path from its endpoint (node awareness — any open path, not just selected).
     if (!this.path) {
-      // Try resume open-ended path: if a single open path is selected and click is near its last anchor, continue it.
-      const sel = ctx.scene.selected
-      if (
-        sel.length === 1 &&
-        sel[0] instanceof PathElement &&
-        !(sel[0] as PathElement).closed &&
-        !(sel[0] as PathElement).drafting
-      ) {
-        const cand = sel[0] as PathElement
-        if (cand.points.length >= 1) {
-          const scale = ctx.renderer.scale
-          const thresh = 8 / (scale > 0 ? scale : 1)
-          const last = cand.points[cand.points.length - 1]!
-          const lastVis = cand.storedToWorld({ x: last.x, y: last.y })
-          const dLast = Math.hypot(p.x - lastVis.x, p.y - lastVis.y)
-          if (dLast <= thresh) {
-            this.path = cand
-            this.path.drafting = true
-            // Snapshot for cancel (preserve original if user aborts continuation)
-            this.resumeSnapshot = {
-              points: cand.points.map((pt) => ({
-                x: pt.x,
-                y: pt.y,
-                hIn: pt.hIn ? { x: pt.hIn.x, y: pt.hIn.y } : null,
-                hOut: pt.hOut ? { x: pt.hOut.x, y: pt.hOut.y } : null,
-              })),
-              closed: cand.closed,
-            }
-            this.activeIndex = cand.points.length - 1
-            this.dragging = false
-            this.dragStart = null
-            this.path.cursor = p
-            this.path.editing = false
-            ctx.requestRender()
-            return
-          }
+      const hit = this.findOpenEndpointNear(p, ctx.renderer.scale, ctx.scene)
+      if (hit) {
+        const cand = hit.path
+        this.path = cand
+        this.path.drafting = true
+        this.resumeSnapshot = {
+          points: cand.points.map((pt) => ({
+            x: pt.x,
+            y: pt.y,
+            hIn: pt.hIn ? { x: pt.hIn.x, y: pt.hIn.y } : null,
+            hOut: pt.hOut ? { x: pt.hOut.x, y: pt.hOut.y } : null,
+          })),
+          closed: cand.closed,
         }
+        this.resumeEnd = hit.index === 0 ? 'start' : 'end'
+        this.activeIndex = hit.index
+        this.dragging = false
+        this.dragStart = null
+        this.path.cursor = p
+        this.path.editing = false
+        ctx.scene.select(cand, false)
+        this.hoveredEndpoint = null
+        ;(
+          ctx.renderer as unknown as { setPenHover: (h: unknown) => void }
+        ).setPenHover(null)
+        ctx.requestRender()
+        return
       }
       const path = new PathElement(p.x, p.y)
       path.drafting = true
@@ -83,27 +132,66 @@ export class PenTool implements Tool {
       return
     }
 
-    // Close the path if we click near the first anchor (with >= 2 points).
-    // Allow handle positioning until mouse up — preserve target node's existing handle.
-    // Draw curve preview based on the last anchor's established hOut and the entry handle (first.hIn) at cursor.
+    // Close the path if we click near an endpoint (first or last) with >=2 points.
+    // Allow handle positioning until mouse up — preserve target node's opposite handle.
     const scale = ctx.renderer.scale
     const closeDist = 8 / (scale > 0 ? scale : 1)
     const first = this.path.points[0]!
-    const firstWorld = { x: first.x, y: first.y }
-    if (this.path.points.length >= 2) {
-      const d = Math.hypot(p.x - firstWorld.x, p.y - firstWorld.y)
-      if (d <= closeDist) {
-        // Enter closing-drag mode: preview closed shape immediately (based on last.hOut), allow entry handle (first.hIn) positioning until mouse up.
-        // Preserve target node's outgoing handle (first.hOut) — only first.hIn is driven by the drag.
+    const last = this.path.points[this.path.points.length - 1]!
+    const firstWorld = first ? { x: first.x, y: first.y } : null
+    const lastWorld = last ? { x: last.x, y: last.y } : null
+    let closeTarget: {
+      index: number
+      kind: 'hIn' | 'hOut'
+      origin: { hIn: Point | null; hOut: Point | null }
+    } | null = null
+    if (this.path.points.length >= 2 && firstWorld) {
+      const dFirst = Math.hypot(p.x - firstWorld.x, p.y - firstWorld.y)
+      if (dFirst <= closeDist) {
+        closeTarget = {
+          index: 0,
+          kind: 'hIn',
+          origin: {
+            hIn: first.hIn ? { x: first.hIn.x, y: first.hIn.y } : null,
+            hOut: first.hOut ? { x: first.hOut.x, y: first.hOut.y } : null,
+          },
+        }
+      } else if (lastWorld) {
+        const dLast = Math.hypot(p.x - lastWorld.x, p.y - lastWorld.y)
+        if (dLast <= closeDist) {
+          // For open path, clicking near last when already at last is not close; but for resumed start, closing to last
+          // Only allow close to last if not already at that endpoint (avoid immediate close when resuming)
+          // For now, allow close to last as well for generic awareness
+          closeTarget = {
+            index: this.path.points.length - 1,
+            kind: 'hOut',
+            origin: {
+              hIn: last.hIn ? { x: last.hIn.x, y: last.hIn.y } : null,
+              hOut: last.hOut ? { x: last.hOut.x, y: last.hOut.y } : null,
+            },
+          }
+        }
+      }
+    }
+    if (closeTarget) {
+      // For new path (resumeEnd null), only close to first is intended; for resumed, allow both
+      // To avoid closing immediately when resuming at an endpoint, ensure we are not closing to the same endpoint we are resuming from
+      if (this.resumeEnd === 'start' && closeTarget.index === 0) {
+        // Resuming at start, clicking near start again should not close to start — skip
+      } else if (
+        this.resumeEnd === 'end' &&
+        closeTarget.index === this.path.points.length - 1
+      ) {
+        // Resuming at end, clicking near end again should not close — skip
+      } else {
         this.closing = true
         this.dragging = true
-        this.dragStart = { x: firstWorld.x, y: firstWorld.y }
-        this.activeIndex = 0
-        this.closingOrigin = {
-          hIn: first.hIn ? { x: first.hIn.x, y: first.hIn.y } : null,
-          hOut: first.hOut ? { x: first.hOut.x, y: first.hOut.y } : null,
-        }
-        // Preview closed curve immediately — hOut of last anchor is already established, first.hIn will track cursor
+        const targetPt = this.path.points[closeTarget.index]!
+        this.dragStart = { x: targetPt.x, y: targetPt.y }
+        this.activeIndex = closeTarget.index
+        this.closingTargetIndex = closeTarget.index
+        this.closingHandleKind = closeTarget.kind
+        this.closingOrigin = closeTarget.origin
         this.path.closed = true
         this.path.cursor = null
         ctx.requestRender()
@@ -112,7 +200,13 @@ export class PenTool implements Tool {
     }
 
     // Otherwise add another anchor.
-    this.activeIndex = this.path.addAnchor(p)
+    if (this.resumeEnd === 'start') {
+      // Prepend at beginning
+      this.path.points.unshift({ x: p.x, y: p.y, hIn: null, hOut: null })
+      this.activeIndex = 0
+    } else {
+      this.activeIndex = this.path.addAnchor(p)
+    }
     this.dragging = true
     this.dragStart = p
     this.path.cursor = p
@@ -120,12 +214,36 @@ export class PenTool implements Tool {
   }
 
   onPointerMove(ctx: ToolContext): void {
-    if (!this.path) return
+    if (!this.path) {
+      // Node awareness — highlight nearest open endpoint for continuation
+      const hit = this.findOpenEndpointNear(
+        ctx.point,
+        ctx.renderer.scale,
+        ctx.scene
+      )
+      const prevId = this.hoveredEndpoint?.path.id ?? null
+      const prevIdx = this.hoveredEndpoint?.index ?? -1
+      const curId = hit?.path.id ?? null
+      const curIdx = hit?.index ?? -1
+      this.hoveredEndpoint = hit
+      ;(
+        ctx.renderer as unknown as { setPenHover: (h: unknown) => void }
+      ).setPenHover(hit ? { pathId: hit.path.id, index: hit.index } : null)
+      if (hit) ctx.setCursor('copy')
+      else ctx.setCursor(this.cursor)
+      if (prevId !== curId || prevIdx !== curIdx) ctx.requestRender()
+      return
+    }
     if (this.closing) {
       // Preview closed curve directly — no rubber band; entry handle tracks cursor
       this.path.cursor = null
-      if (this.dragging && this.dragStart && this.activeIndex >= 0) {
-        const first = this.path.points[0]!
+      if (
+        this.dragging &&
+        this.dragStart &&
+        this.activeIndex >= 0 &&
+        this.closingTargetIndex !== null
+      ) {
+        const target = this.path.points[this.closingTargetIndex]!
         const cursor = { x: ctx.point.x, y: ctx.point.y }
         const scale = ctx.renderer.scale
         const thresh = 3 / (scale > 0 ? scale : 1)
@@ -134,18 +252,30 @@ export class PenTool implements Tool {
           cursor.y - this.dragStart.y
         )
         if (this.closingOrigin) {
-          first.hOut = this.closingOrigin.hOut
-            ? { x: this.closingOrigin.hOut.x, y: this.closingOrigin.hOut.y }
-            : null
-        }
-        if (dist < thresh) {
-          if (this.closingOrigin) {
-            first.hIn = this.closingOrigin.hIn
+          // Preserve opposite handle of target
+          if (this.closingHandleKind === 'hIn') {
+            target.hOut = this.closingOrigin.hOut
+              ? { x: this.closingOrigin.hOut.x, y: this.closingOrigin.hOut.y }
+              : null
+            if (dist < thresh) {
+              target.hIn = this.closingOrigin.hIn
+                ? { x: this.closingOrigin.hIn.x, y: this.closingOrigin.hIn.y }
+                : null
+            } else {
+              target.hIn = cursor
+            }
+          } else {
+            target.hIn = this.closingOrigin.hIn
               ? { x: this.closingOrigin.hIn.x, y: this.closingOrigin.hIn.y }
               : null
+            if (dist < thresh) {
+              target.hOut = this.closingOrigin.hOut
+                ? { x: this.closingOrigin.hOut.x, y: this.closingOrigin.hOut.y }
+                : null
+            } else {
+              target.hOut = cursor
+            }
           }
-        } else {
-          first.hIn = cursor
         }
       }
       ctx.requestRender()
@@ -169,6 +299,8 @@ export class PenTool implements Tool {
       this.path!.closed = true
       this.closing = false
       this.closingOrigin = null
+      this.closingTargetIndex = null
+      this.closingHandleKind = null
       this.dragging = false
       this.dragStart = null
       this.finish(ctx)
@@ -183,13 +315,6 @@ export class PenTool implements Tool {
   onKeyDown(ctx: ToolContext, key: string): void {
     if (key === 'Enter') this.finish(ctx)
     else if (key === 'Escape') this.cancel(ctx)
-  }
-
-  onDeactivate(ctx: ToolContext): void {
-    if (this.path) {
-      if (this.path.points.length >= 2) this.finish(ctx)
-      else this.cancel(ctx)
-    }
   }
 
   private finish(ctx: ToolContext): void {
@@ -242,6 +367,10 @@ export class PenTool implements Tool {
     this.dragStart = null
     this.closing = false
     this.closingOrigin = null
+    this.closingTargetIndex = null
+    this.closingHandleKind = null
     this.resumeSnapshot = null
+    this.hoveredEndpoint = null
+    this.resumeEnd = null
   }
 }
