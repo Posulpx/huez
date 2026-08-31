@@ -305,7 +305,8 @@ export class PenTool implements Tool {
             hover = { index: this.path.points.length - 1, kind: 'hOut' }
         }
         if (hover) {
-          if (this.resumeEnd === 'start' && hover.index === 0) hover = null
+          if (hover.index === this.activeIndex) hover = null
+          else if (this.resumeEnd === 'start' && hover.index === 0) hover = null
           else if (
             this.resumeEnd === 'end' &&
             hover.index === this.path.points.length - 1
