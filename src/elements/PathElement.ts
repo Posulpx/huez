@@ -1,7 +1,7 @@
-import { BaseElement } from '../engine/BaseElement'
+﻿import { BaseElement } from '../engine/BaseElement'
 import type { Bounds, ElementStyle, Point } from '../engine/types'
 
-/** A single Bézier anchor. `hIn`/`hOut` are absolute world-space control
+/** A single B├⌐zier anchor. `hIn`/`hOut` are absolute world-space control
  *  handles; `null` means the anchor is a corner (no curvature on that side). */
 export interface PathAnchor {
   x: number
@@ -11,11 +11,11 @@ export interface PathAnchor {
 }
 
 /**
- * A vector path built from cubic Bézier segments between anchors. Anchor
+ * A vector path built from cubic B├⌐zier segments between anchors. Anchor
  * positions and control handles are stored in absolute world coordinates.
  * Supports an open polyline or a closed shape. While `drafting` is true it
  * renders its anchor points, handle arms, and a rubber-band preview to the
- * cursor — the classic pen-tool affordance.
+ * cursor ΓÇö the classic pen-tool affordance.
  */
 export class PathElement extends BaseElement {
   points: PathAnchor[] = []
@@ -29,6 +29,10 @@ export class PathElement extends BaseElement {
   cursor: Point | null = null
   /** When pen resumes an open path, indicates which end is being continued for preview. */
   resumeEnd: 'start' | 'end' | null = null
+  /** When closing a path, the anchor being closed and which handle is being positioned. */
+  closingTarget: { index: number; kind: 'hIn' | 'hOut' } | null = null
+  /** Cursor position captured during closing mode (cursor is null while closing). */
+  closingCursor: Point | null = null
 
   constructor(x: number, y: number, style?: Partial<ElementStyle>) {
     super(x, y, { fill: null, stroke: '#1d1d1f', strokeWidth: 2, ...style })
@@ -148,6 +152,93 @@ export class PathElement extends BaseElement {
   /** Anchor squares, handle arms, and a dashed rubber-band to the cursor. */
   private renderDraft(ctx: CanvasRenderingContext2D): void {
     const pts = this.points
+
+    if (this.closingTarget) {
+      const target = pts[this.closingTarget.index]!
+      const isStart = this.closingTarget.index === 0
+
+      // Closing target highlight.
+      ctx.save()
+      ctx.strokeStyle = '#ff8c00'
+      ctx.lineWidth = 2
+      const cs = 8
+      ctx.fillStyle = 'rgba(255, 140, 0, 0.2)'
+      ctx.fillRect(target.x - cs, target.y - cs, cs * 2, cs * 2)
+      ctx.strokeRect(target.x - cs, target.y - cs, cs * 2, cs * 2)
+      ctx.restore()
+
+      // Construction line: dashed mirror of the handle being built across the anchor.
+      const builtHandle =
+        this.closingTarget.kind === 'hIn' ? target.hIn : target.hOut
+      if (builtHandle) {
+        const mirrorX = 2 * target.x - builtHandle.x
+        const mirrorY = 2 * target.y - builtHandle.y
+        ctx.save()
+        ctx.strokeStyle = '#ff8c00'
+        ctx.lineWidth = 1
+        ctx.setLineDash([4, 4])
+        ctx.beginPath()
+        ctx.moveTo(target.x, target.y)
+        ctx.lineTo(mirrorX, mirrorY)
+        ctx.stroke()
+        ctx.setLineDash([])
+        ctx.fillStyle = 'rgba(255, 140, 0, 0.4)'
+        ctx.beginPath()
+        ctx.arc(mirrorX, mirrorY, 3, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.restore()
+      }
+
+      // Curve preview on opposite direction of the handle being built.
+      const adjIdx = isStart ? pts.length - 1 : this.closingTarget.index - 1
+      if (
+        adjIdx >= 0 &&
+        adjIdx < pts.length &&
+        adjIdx !== this.closingTarget.index
+      ) {
+        const adj = pts[adjIdx]!
+        const adjOut = adj.hOut
+        if (adjOut) {
+          const startPt = isStart ? target : adj
+          const endPt = isStart ? adj : target
+          const c1 = adjOut
+          const c2 = isStart
+            ? (target.hIn ?? { x: target.x, y: target.y })
+            : { x: target.x, y: target.y }
+          ctx.save()
+          ctx.strokeStyle = '#4f8cff'
+          ctx.lineWidth = 1
+          ctx.setLineDash([6, 3])
+          ctx.beginPath()
+          ctx.moveTo(startPt.x, startPt.y)
+          ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, endPt.x, endPt.y)
+          ctx.stroke()
+          ctx.setLineDash([])
+          ctx.restore()
+        }
+      }
+
+      ctx.save()
+      ctx.strokeStyle = '#4f8cff'
+      ctx.lineWidth = 1
+      ctx.setLineDash([4, 4])
+      ctx.beginPath()
+      if (this.closingTarget.kind === 'hIn') {
+        const cx = this.closingCursor?.x ?? this.cursor?.x ?? target.x
+        const cy = this.closingCursor?.y ?? this.cursor?.y ?? target.y
+        ctx.moveTo(cx, cy)
+        ctx.lineTo(target.x, target.y)
+      } else {
+        const cx = this.closingCursor?.x ?? this.cursor?.x ?? target.x
+        const cy = this.closingCursor?.y ?? this.cursor?.y ?? target.y
+        ctx.moveTo(target.x, target.y)
+        ctx.lineTo(cx, cy)
+      }
+      ctx.stroke()
+      ctx.restore()
+      return
+    }
+
     if (this.cursor && pts.length) {
       ctx.save()
       ctx.strokeStyle = '#4f8cff'
@@ -381,7 +472,7 @@ export class PathElement extends BaseElement {
     else if (this.editingSelected > index) this.editingSelected--
   }
 
-  /** Sample the Bézier path into a polyline of world-space points. */
+  /** Sample the B├⌐zier path into a polyline of world-space points. */
   private flatten(steps = 16): Point[] {
     const pts = this.points
     const out: Point[] = []

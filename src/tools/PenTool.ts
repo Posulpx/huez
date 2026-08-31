@@ -1,11 +1,11 @@
-import type { Tool, ToolContext } from './Tool'
+﻿import type { Tool, ToolContext } from './Tool'
 import type { Point } from '../engine/types'
 import { PathElement } from '../elements/PathElement'
 import { logApiCall } from './log'
 
 /**
  * Pen tool (Illustrator / Figma style). Click to drop corner anchors; click
- * and drag to pull out mirrored Bézier handles for a smooth point. Click the
+ * and drag to pull out mirrored B├⌐zier handles for a smooth point. Click the
  * first anchor again to close the path. Press Enter to finish an open path
  * (also finishes when you switch tools), Escape to cancel. The path is added
  * to the scene immediately and committed when the gesture ends.
@@ -16,7 +16,7 @@ import { logApiCall } from './log'
 export class PenTool implements Tool {
   readonly id = 'pen'
   readonly label = 'Pen'
-  readonly icon = '∿'
+  readonly icon = 'Γê┐'
   readonly cursor = 'crosshair'
   readonly category: Tool['category'] = 'geometry'
 
@@ -90,7 +90,7 @@ export class PenTool implements Tool {
   onPointerDown(ctx: ToolContext): void {
     const p = ctx.point
 
-    // Start a new path, or resume an open-ended path from its endpoint (node awareness — any open path, not just selected).
+    // Start a new path, or resume an open-ended path from its endpoint (node awareness ΓÇö any open path, not just selected).
     if (!this.path) {
       const hit = this.findOpenEndpointNear(p, ctx.renderer.scale, ctx.scene)
       if (hit) {
@@ -134,7 +134,7 @@ export class PenTool implements Tool {
     }
 
     // Close the path if we click near an endpoint (first or last) with >=2 points.
-    // Allow handle positioning until mouse up — preserve target node's opposite handle.
+    // Allow handle positioning until mouse up ΓÇö preserve target node's opposite handle.
     const scale = ctx.renderer.scale
     const closeDist = 8 / (scale > 0 ? scale : 1)
     const first = this.path.points[0]!
@@ -178,12 +178,12 @@ export class PenTool implements Tool {
       // For new path (resumeEnd null), only close to first is intended; for resumed, allow both
       // To avoid closing immediately when resuming at an endpoint, ensure we are not closing to the same endpoint we are resuming from
       if (this.resumeEnd === 'start' && closeTarget.index === 0) {
-        // Resuming at start, clicking near start again should not close to start — skip
+        // Resuming at start, clicking near start again should not close to start ΓÇö skip
       } else if (
         this.resumeEnd === 'end' &&
         closeTarget.index === this.path.points.length - 1
       ) {
-        // Resuming at end, clicking near end again should not close — skip
+        // Resuming at end, clicking near end again should not close ΓÇö skip
       } else {
         this.closing = true
         this.dragging = true
@@ -195,6 +195,11 @@ export class PenTool implements Tool {
         this.closingOrigin = closeTarget.origin
         this.path.closed = true
         this.path.cursor = null
+        this.path.closingTarget = {
+          index: closeTarget.index,
+          kind: closeTarget.kind,
+        }
+        this.path.closingCursor = { x: p.x, y: p.y }
         ctx.requestRender()
         return
       }
@@ -216,7 +221,7 @@ export class PenTool implements Tool {
 
   onPointerMove(ctx: ToolContext): void {
     if (!this.path) {
-      // Node awareness — highlight nearest open endpoint for continuation
+      // Node awareness ΓÇö highlight nearest open endpoint for continuation
       const hit = this.findOpenEndpointNear(
         ctx.point,
         ctx.renderer.scale,
@@ -236,8 +241,9 @@ export class PenTool implements Tool {
       return
     }
     if (this.closing) {
-      // Preview closed curve directly — no rubber band; entry handle tracks cursor
+      // Preview closed curve directly ΓÇö no rubber band; entry handle tracks cursor
       this.path.cursor = null
+      this.path.closingCursor = { x: ctx.point.x, y: ctx.point.y }
       if (
         this.dragging &&
         this.dragStart &&
@@ -296,8 +302,10 @@ export class PenTool implements Tool {
 
   onPointerUp(ctx: ToolContext): void {
     if (this.closing) {
-      // Finish close on mouse up — entry handle has been positioned, preserve target handle already done.
+      // Finish close on mouse up ΓÇö entry handle has been positioned, preserve target handle already done.
       this.path!.closed = true
+      this.path!.closingTarget = null
+      this.path!.closingCursor = null
       this.closing = false
       this.closingOrigin = null
       this.closingTargetIndex = null
@@ -325,7 +333,7 @@ export class PenTool implements Tool {
     if (!path) return
     if (path.points.length < 2) {
       if (wasResumed) {
-        // Resumed path had original points — keep it, just finish
+        // Resumed path had original points ΓÇö keep it, just finish
       } else {
         ctx.scene.remove(path)
         ctx.requestRender()
@@ -362,7 +370,11 @@ export class PenTool implements Tool {
   }
 
   private reset(): void {
-    if (this.path) this.path.resumeEnd = null
+    if (this.path) {
+      this.path.resumeEnd = null
+      this.path.closingTarget = null
+      this.path.closingCursor = null
+    }
     this.path = null
     this.activeIndex = -1
     this.dragging = false
