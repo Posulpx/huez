@@ -16,6 +16,7 @@ import { PathElement } from '../elements/PathElement'
 export class PathEditor {
   private editingPath: PathElement | null = null
   private drag: { index: number; kind: 'anchor' | 'hIn' | 'hOut' } | null = null
+  private dragAnchorStart: Point | null = null
 
   constructor(
     private scene: Scene,
@@ -51,6 +52,7 @@ export class PathEditor {
     p.editingSelected = -1
     this.editingPath = null
     this.drag = null
+    this.dragAnchorStart = null
     this.requestRender()
   }
 
@@ -60,14 +62,20 @@ export class PathEditor {
   }
 
   /** Returns true if the event was consumed (path handle/anchor or insert). */
-  handlePointerDown(world: Point, scale: number): boolean {
+  handlePointerDown(world: Point, scale: number, altKey = false): boolean {
     const path = this.editingPath
     if (!path) return false
-
+    void altKey
     const hit = path.hitAnchor(world, scale)
     if (hit) {
       path.editingSelected = hit.index
       this.drag = { index: hit.index, kind: hit.kind }
+      if (hit.kind === 'anchor') {
+        const a = path.points[hit.index]!
+        this.dragAnchorStart = { x: a.x, y: a.y }
+      } else {
+        this.dragAnchorStart = null
+      }
       this.requestRender()
       return true
     }
@@ -87,7 +95,7 @@ export class PathEditor {
     return false
   }
 
-  handlePointerMove(world: Point): boolean {
+  handlePointerMove(world: Point, altKey = false): boolean {
     const path = this.editingPath
     const d = this.drag
     if (!path || !d) return false
@@ -97,27 +105,52 @@ export class PathEditor {
     const stored = path.worldToStored(world)
 
     if (d.kind === 'anchor') {
-      const dx = stored.x - anchor.x
-      const dy = stored.y - anchor.y
-      anchor.x = stored.x
-      anchor.y = stored.y
-      // Handles follow the anchor to keep their offset (unless null)
-      if (anchor.hIn) {
-        anchor.hIn.x += dx
-        anchor.hIn.y += dy
+      // Alt+drag on node → create symmetrical handles (anchor stays, handles mirror)
+      if (altKey && this.dragAnchorStart) {
+        const ax = this.dragAnchorStart.x
+        const ay = this.dragAnchorStart.y
+        // Keep anchor fixed at start
+        anchor.x = ax
+        anchor.y = ay
+        const vx = stored.x - ax
+        const vy = stored.y - ay
+        // Small deadzone to avoid zero-length jitter
+        if (Math.hypot(vx, vy) < 1e-6) {
+          anchor.hIn = null
+          anchor.hOut = null
+        } else {
+          anchor.hOut = { x: ax + vx, y: ay + vy }
+          anchor.hIn = { x: ax - vx, y: ay - vy }
+        }
+      } else {
+        const dx = stored.x - anchor.x
+        const dy = stored.y - anchor.y
+        anchor.x = stored.x
+        anchor.y = stored.y
+        if (anchor.hIn) {
+          anchor.hIn.x += dx
+          anchor.hIn.y += dy
+        }
+        if (anchor.hOut) {
+          anchor.hOut.x += dx
+          anchor.hOut.y += dy
+        }
       }
-      if (anchor.hOut) {
-        anchor.hOut.x += dx
-        anchor.hOut.y += dy
-      }
-      // Keep x,y of element in sync? PathElement bounds derived from points,
-      // but x,y field is used for moveTo offset. No need to update x,y here;
-      // bounds will hug new points. Keep path.x/y near first point for
-      // consistency if needed.
     } else if (d.kind === 'hIn') {
       anchor.hIn = { x: stored.x, y: stored.y }
+      // By default locked: mirror out handle symmetrically
+      if (!altKey) {
+        const vx = stored.x - anchor.x
+        const vy = stored.y - anchor.y
+        anchor.hOut = { x: anchor.x - vx, y: anchor.y - vy }
+      }
     } else if (d.kind === 'hOut') {
       anchor.hOut = { x: stored.x, y: stored.y }
+      if (!altKey) {
+        const vx = stored.x - anchor.x
+        const vy = stored.y - anchor.y
+        anchor.hIn = { x: anchor.x - vx, y: anchor.y - vy }
+      }
     }
     this.requestRender()
     return true
@@ -126,6 +159,7 @@ export class PathEditor {
   handlePointerUp(): boolean {
     if (!this.drag) return false
     this.drag = null
+    this.dragAnchorStart = null
     this.requestRender()
     return true
   }

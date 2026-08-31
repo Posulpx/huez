@@ -161,7 +161,13 @@ export class App {
         if (e.button === 0) {
           const world = this.renderer.toWorld(e.clientX, e.clientY)
           // Hit anchor/handle or insert on stroke → handled
-          if (this.pathEditor.handlePointerDown(world, this.renderer.scale)) {
+          if (
+            this.pathEditor.handlePointerDown(
+              world,
+              this.renderer.scale,
+              e.altKey
+            )
+          ) {
             canvas.setPointerCapture(e.pointerId)
             e.preventDefault()
             this.render()
@@ -208,7 +214,7 @@ export class App {
       }
       if (this.pathEditor.isEditing()) {
         const world = this.renderer.toWorld(e.clientX, e.clientY)
-        if (this.pathEditor.handlePointerMove(world)) {
+        if (this.pathEditor.handlePointerMove(world, e.altKey)) {
           this.render()
           return
         }
