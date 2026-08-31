@@ -540,6 +540,19 @@ body {
   color: var(--muted);
 }
 
+/* ---- Boolean panel (left sidebar) ---- */
+.boolean-panel {
+  margin-top: 16px;
+  padding: 12px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.boolean-panel .panel-title {
+  margin-bottom: 8px;
+}
+
 /* ---- Tool lister (bottom of left sidebar) ---- */
 .lister-title {
   margin-top: 18px;

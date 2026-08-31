@@ -5,7 +5,6 @@ import { ShapeElement } from '../elements/ShapeElement'
 import { ArtboardElement } from '../elements/ArtboardElement'
 import { setElementAnchor } from '../engine/anchor'
 import { shapeToPath } from '../engine/shapeToPath'
-import { booleanOp } from '../engine/booleanOps'
 import type { AnchorPoint, ElementStyle } from '../engine/types'
 
 /**
@@ -46,9 +45,6 @@ export class PropertiesPanel {
       multi.className = 'hint'
       multi.textContent = `${selected.length} elements selected.`
       this.root.appendChild(multi)
-      if (selected.length === 2) {
-        this.root.appendChild(this.booleanRow(selected[0]!, selected[1]!))
-      }
       return
     }
 
@@ -436,72 +432,6 @@ export class PropertiesPanel {
     hint.textContent = 'Editable path'
     hint.style.marginLeft = '8px'
     wrap.appendChild(hint)
-    return wrap
-  }
-
-  private booleanRow(a: BaseElement, b: BaseElement): HTMLElement {
-    const wrap = document.createElement('div')
-    wrap.className = 'prop-row boolean-row'
-    wrap.style.flexDirection = 'column'
-    wrap.style.alignItems = 'stretch'
-    wrap.style.gap = '6px'
-
-    const title = document.createElement('div')
-    title.className = 'section-title'
-    title.textContent = 'Boolean'
-    title.style.marginBottom = '2px'
-    wrap.appendChild(title)
-
-    const hint = document.createElement('span')
-    hint.className = 'hint'
-    hint.textContent = 'Select 2 closed shapes/paths'
-    hint.style.fontSize = '11px'
-    wrap.appendChild(hint)
-
-    const btnRow = document.createElement('div')
-    btnRow.style.display = 'flex'
-    btnRow.style.gap = '6px'
-
-    const mkBtn = (
-      label: string,
-      op: 'union' | 'intersection' | 'difference',
-      title: string
-    ) => {
-      const btn = document.createElement('button')
-      btn.className = 'mini-btn'
-      btn.textContent = label
-      btn.title = title
-      btn.addEventListener('click', () => {
-        const result = booleanOp(a, b, op)
-        if (result === null) {
-          // Not operable (e.g. open path or line)
-          hint.textContent = 'Need 2 closed shapes/paths'
-          hint.style.color = '#ff6b6b'
-          return
-        }
-        // Remove originals
-        this.scene.remove(a)
-        this.scene.remove(b)
-        if (result.length === 0) {
-          hint.textContent = 'Result empty — both removed'
-          this.requestRender()
-          return
-        }
-        // Add results and select them
-        for (const p of result) this.scene.add(p)
-        this.scene.clearSelection()
-        for (const p of result) this.scene.select(p, true)
-        this.requestRender()
-      })
-      return btn
-    }
-
-    btnRow.appendChild(mkBtn('Add', 'union', 'Union (A+B)'))
-    btnRow.appendChild(
-      mkBtn('Subtract', 'difference', 'Subtract B from A (A-B)')
-    )
-    btnRow.appendChild(mkBtn('Intersect', 'intersection', 'Intersection (A∩B)'))
-    wrap.appendChild(btnRow)
     return wrap
   }
 }

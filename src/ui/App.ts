@@ -12,6 +12,7 @@ import { ToolPalette } from './ToolPalette'
 import { PropertiesPanel } from './PropertiesPanel'
 import { LayerPanel } from './LayerPanel'
 import { ActivityPanel } from './ActivityPanel'
+import { BooleanPanel } from './BooleanPanel'
 import { TextEditor } from './TextEditor'
 import { TextElement } from '../elements/TextElement'
 import { PathEditor } from './PathEditor'
@@ -68,6 +69,8 @@ export class App {
       },
       'select'
     )
+    // Boolean panel lives in left sidebar below the tool palette
+    new BooleanPanel(paletteRoot, this.scene, () => this.render())
     new LayerPanel(layersRoot, this.scene, () => this.render())
     new PropertiesPanel(propsRoot, this.scene, () => this.render())
     new ActivityPanel(activityRoot)
