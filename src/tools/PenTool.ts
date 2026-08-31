@@ -123,6 +123,9 @@ export class PenTool implements Tool {
       }
       const path = new PathElement(p.x, p.y)
       path.drafting = true
+      // Auto-assign to artboard under creation point, if any.
+      const ab = ctx.scene.artboardAtPoint(p)
+      if (ab) path.artboardId = ab.id
       this.activeIndex = path.addAnchor(p)
       ctx.scene.add(path)
       this.path = path
@@ -416,12 +419,24 @@ export class PenTool implements Tool {
     }
     this.path.cursor = ctx.point
     if (this.dragging && this.dragStart && this.activeIndex >= 0) {
-      const out = { x: ctx.point.x, y: ctx.point.y }
-      const inn = {
-        x: this.dragStart.x * 2 - ctx.point.x,
-        y: this.dragStart.y * 2 - ctx.point.y,
+      // Flipping (mirrored handles) is allowed only for closing paths;
+      // for open-ended paths keep handles unflipped.
+      const isStart = this.resumeEnd === 'start'
+      if (isStart) {
+        this.path.setHandles(this.activeIndex, null, {
+          x: ctx.point.x,
+          y: ctx.point.y,
+        })
+      } else {
+        this.path.setHandles(
+          this.activeIndex,
+          {
+            x: ctx.point.x,
+            y: ctx.point.y,
+          },
+          null
+        )
       }
-      this.path.setHandles(this.activeIndex, out, inn)
     }
     ctx.requestRender()
   }
