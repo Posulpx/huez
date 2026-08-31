@@ -18,6 +18,7 @@ export class PathEditor {
   private drag: { index: number; kind: 'anchor' | 'hIn' | 'hOut' } | null = null
   private dragAnchorStart: Point | null = null
   private dragOppositeLen: number | null = null
+  private dragAngleDiff: number | null = null
 
   constructor(
     private scene: Scene,
@@ -55,6 +56,7 @@ export class PathEditor {
     this.drag = null
     this.dragAnchorStart = null
     this.dragOppositeLen = null
+    this.dragAngleDiff = null
     this.requestRender()
   }
 
@@ -78,13 +80,21 @@ export class PathEditor {
         this.dragOppositeLen = null
       } else {
         this.dragAnchorStart = null
-        // Capture opposite handle length to preserve asymmetry when locked
+        // Capture opposite handle length + angular difference to preserve asymmetry with generic angular lock
         const a = path.points[hit.index]!
         const opposite = hit.kind === 'hIn' ? a.hOut : a.hIn
-        if (opposite) {
+        const dragged = hit.kind === 'hIn' ? a.hIn : a.hOut
+        if (opposite && dragged) {
           this.dragOppositeLen = Math.hypot(opposite.x - a.x, opposite.y - a.y)
+          const angDrag = Math.atan2(dragged.y - a.y, dragged.x - a.x)
+          const angOpp = Math.atan2(opposite.y - a.y, opposite.x - a.x)
+          this.dragAngleDiff = angOpp - angDrag
+        } else if (opposite) {
+          this.dragOppositeLen = Math.hypot(opposite.x - a.x, opposite.y - a.y)
+          this.dragAngleDiff = null
         } else {
           this.dragOppositeLen = null
+          this.dragAngleDiff = null
         }
       }
       this.requestRender()
@@ -152,13 +162,14 @@ export class PathEditor {
       }
     } else if (d.kind === 'hIn') {
       anchor.hIn = { x: stored.x, y: stored.y }
-      // Angular lock (default): keep opposite collinear (180°) but preserve its length (asymmetry).
-      // Only applies if opposite existed at drag start — otherwise preserve asymmetry (keep null).
+      // Generic angular lock (default): preserve opposite's length and original angular offset.
+      // Only applies if opposite existed at drag start — otherwise keep null (preserve asymmetry).
       if (!altKey && this.dragOppositeLen !== null) {
         const vx = stored.x - anchor.x
         const vy = stored.y - anchor.y
         const angle = Math.atan2(vy, vx)
-        const oppAngle = angle + Math.PI
+        const diff = this.dragAngleDiff ?? Math.PI
+        const oppAngle = angle + diff
         const len = this.dragOppositeLen
         anchor.hOut = {
           x: anchor.x + Math.cos(oppAngle) * len,
@@ -171,8 +182,11 @@ export class PathEditor {
         const vx = stored.x - anchor.x
         const vy = stored.y - anchor.y
         const angle = Math.atan2(vy, vx)
+        const diff = this.dragAngleDiff ?? Math.PI
+        // For hOut drag, diff was angleIn - angleOut, so opposite angle = angle + diff
+        // But diff captured as angleOpp - angleDrag, so same formula works (diff = angleIn - angleOut)
+        const oppAngle = angle + diff
         const len = this.dragOppositeLen
-        const oppAngle = angle + Math.PI
         anchor.hIn = {
           x: anchor.x + Math.cos(oppAngle) * len,
           y: anchor.y + Math.sin(oppAngle) * len,
@@ -188,6 +202,7 @@ export class PathEditor {
     this.drag = null
     this.dragAnchorStart = null
     this.dragOppositeLen = null
+    this.dragAngleDiff = null
     this.requestRender()
     return true
   }
