@@ -136,23 +136,8 @@ export class PathElement extends BaseElement {
     if (this.closed && pts.length > 1) {
       const last = pts[pts.length - 1]!
       const first = pts[0]!
-      let c1 = last.hOut ?? { x: last.x, y: last.y }
-      let c2 = first.hIn ?? { x: first.x, y: first.y }
-      if (this.closingTarget) {
-        if (
-          this.closingTarget.index === pts.length - 1 &&
-          this.closingTarget.kind === 'hOut' &&
-          last.hOut
-        ) {
-          c1 = { x: 2 * last.x - last.hOut.x, y: 2 * last.y - last.hOut.y }
-        } else if (
-          this.closingTarget.index === 0 &&
-          this.closingTarget.kind === 'hIn' &&
-          first.hIn
-        ) {
-          c2 = { x: 2 * first.x - first.hIn.x, y: 2 * first.y - first.hIn.y }
-        }
-      }
+      const c1 = last.hOut ?? { x: last.x, y: last.y }
+      const c2 = first.hIn ?? { x: first.x, y: first.y }
       ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, first.x, first.y)
     }
     if (this.closed && this.style.fill) {
