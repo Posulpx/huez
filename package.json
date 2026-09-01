@@ -24,7 +24,7 @@
     "release:patch": "zx scripts/bump.mjs patch",
     "release:minor": "zx scripts/bump.mjs minor",
     "release:major": "zx scripts/bump.mjs major",
-    "prepare": "lefthook install",
+    "prepare": "lefthook install || true",
     "vercel-build": "npm run build"
   },
   "prettier": {
@@ -45,5 +45,9 @@
   "dependencies": {
     "paper": "^0.12.18",
     "polygon-clipping": "^0.15.7"
+  },
+  "allowScripts": {
+    "esbuild": true,
+    "lefthook": true
   }
 }
