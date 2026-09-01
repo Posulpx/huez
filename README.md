@@ -24,6 +24,15 @@ npm run build    # type-check (tsc --noEmit) + production build
 npm run preview  # preview the production build
 ```
 
+## Deploy to Vercel
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/Posulpx/huez)
+
+- **Framework:** Vite (auto-detected), **Build command:** `npm run build`, **Output:** `dist/`, **Node:** `>=18`.
+- `vercel.json` sets `buildCommand`, `outputDirectory`, `rewrites` (SPA fallback) and long-lived caching for `/assets/*`.
+- No env vars required. Push to `master` to auto-deploy, or `vercel --prod` locally.
+- Local preview of the production build: `npm run build && npm run preview` (serves `dist/`).
+
 ## Project layout
 
 ```

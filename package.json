@@ -8,6 +8,9 @@
     "type": "git",
     "url": "https://github.com/Posulpx/huez.git"
   },
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "scripts": {
     "dev": "vite",
     "build": "zx scripts/build.mjs",
@@ -21,7 +24,8 @@
     "release:patch": "zx scripts/bump.mjs patch",
     "release:minor": "zx scripts/bump.mjs minor",
     "release:major": "zx scripts/bump.mjs major",
-    "prepare": "lefthook install"
+    "prepare": "lefthook install",
+    "vercel-build": "npm run build"
   },
   "prettier": {
     "semi": false,
