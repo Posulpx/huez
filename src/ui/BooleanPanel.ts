@@ -13,7 +13,8 @@ export class BooleanPanel {
   constructor(
     private root: HTMLElement,
     private scene: Scene,
-    private requestRender: () => void
+    private requestRender: () => void,
+    private history?: import('../engine/history').History
   ) {
     this.container = document.createElement('div')
     this.container.className = 'boolean-panel'
@@ -74,6 +75,7 @@ export class BooleanPanel {
           hint.style.color = '#ff6b6b'
           return
         }
+        this.history?.push()
         this.scene.remove(a!)
         this.scene.remove(b!)
         if (result.length === 0) {

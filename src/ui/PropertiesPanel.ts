@@ -17,7 +17,8 @@ export class PropertiesPanel {
   constructor(
     private root: HTMLElement,
     private scene: Scene,
-    private requestRender: () => void
+    private requestRender: () => void,
+    private history?: import('../engine/history').History
   ) {
     this.scene.subscribe(() => this.render())
     this.render()
@@ -163,7 +164,10 @@ export class PropertiesPanel {
     const del = document.createElement('button')
     del.className = 'danger-btn'
     del.textContent = 'Delete element'
-    del.addEventListener('click', () => this.scene.remove(el))
+    del.addEventListener('click', () => {
+      this.history?.push()
+      this.scene.remove(el)
+    })
     this.root.appendChild(del)
   }
 
@@ -421,6 +425,7 @@ export class PropertiesPanel {
     btn.textContent = 'Convert to Path'
     btn.title = 'Convert primitive to editable path'
     btn.addEventListener('click', () => {
+      this.history?.push()
       const path = shapeToPath(el)
       this.scene.replace(el, path)
       this.scene.select(path)
