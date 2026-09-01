@@ -481,6 +481,10 @@ work by area; this log is the plain-English change history.
 - `patch` bump `0.4.1 → 0.4.2` via `scripts/bump.mjs patch` (2026-09-01).
 - `vercel.json:1` — `buildCommand: npm run build`, `outputDirectory: dist`, `framework: vite`, `rewrites` SPA fallback to `/index.html`, `headers` cache for `/assets/*`; `package.json:10` `engines: node >=18` + `vercel-build` script; `README.md:27` Deploy to Vercel button + framework/build/output docs.
 - Verified `npx tsc --noEmit`, `vite build` (373.09 → 375.48 kB with vercel config), manual: `vercel --prod` and push to `master` auto-deploys.
+### P37 — Fix Vercel build allow-scripts ✅
+- `patch` bump `0.4.2 → 0.4.3` via `scripts/bump.mjs patch` (2026-09-01).
+- `package.json:45` `allowScripts: { esbuild, lefthook }`, `.npmrc:1` `fund/audit/ignore-scripts`, `vercel.json:5` `installCommand: npm install --include=dev`, `package.json:27` `prepare: lefthook install || true` to allow `esbuild`/`lefthook` postinstall on Vercel (fixes `allow-scripts` warning treated as error).
+- Verified `npx tsc --noEmit`, `vite build` (375.48 kB) and `vercel --prod` no longer warns.
 ## Known Limitations
 - ✅ Resizing / rotating an **artboard** now re-anchors its assigned children
   (see M6) — this closes the old "children don't follow the artboard" gap.
