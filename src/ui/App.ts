@@ -12,7 +12,6 @@ import { ToolPalette } from './ToolPalette'
 import { PropertiesPanel } from './PropertiesPanel'
 import { LayerPanel } from './LayerPanel'
 import { ActivityPanel } from './ActivityPanel'
-import { BooleanPanel } from './BooleanPanel'
 import { TextEditor } from './TextEditor'
 import { TextElement } from '../elements/TextElement'
 import { PathEditor } from './PathEditor'
@@ -37,8 +36,7 @@ export class App {
     paletteRoot: HTMLElement,
     layersRoot: HTMLElement,
     propsRoot: HTMLElement,
-    activityRoot: HTMLElement,
-    booleanRoot: HTMLElement
+    activityRoot: HTMLElement
   ) {
     this.renderer = new CanvasRenderer(canvas)
     this.tools = new ToolManager(this.scene, this.renderer, () => this.render())
@@ -68,10 +66,10 @@ export class App {
         this.tools.setActive(id)
         this.render()
       },
-      'select'
+      'select',
+      this.scene,
+      () => this.render()
     )
-    // Boolean panel lives next to workspace (left sidebar, own column)
-    new BooleanPanel(booleanRoot, this.scene, () => this.render())
     new LayerPanel(layersRoot, this.scene, () => this.render())
     new PropertiesPanel(propsRoot, this.scene, () => this.render())
     new ActivityPanel(activityRoot)

@@ -16,7 +16,7 @@ import { logApiCall } from './log'
 export class PenTool implements Tool {
   readonly id = 'pen'
   readonly label = 'Pen'
-  readonly icon = 'Γê┐'
+  readonly icon = '🖋️'
   readonly cursor = 'crosshair'
   readonly category: Tool['category'] = 'geometry'
 

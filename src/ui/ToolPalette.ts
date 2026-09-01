@@ -1,5 +1,7 @@
 import type { Tool, ToolCategory } from '../tools/Tool'
 import { getRecords, subscribeRecords, type ToolRecord } from '../tools/records'
+import type { Scene } from '../engine/Scene'
+import { booleanOp } from '../engine/booleanOps'
 
 const CATEGORY_ORDER: ToolCategory[] = ['geometry', 'interaction', 'workspace']
 const CATEGORY_LABEL: Record<ToolCategory, string> = {
@@ -25,12 +27,15 @@ export class ToolPalette {
   private groupRoots = new Map<ToolCategory, HTMLElement>()
   private collapsed = new Set<ToolCategory>()
   private lister: HTMLElement
+  private booleanContainer: HTMLElement | null = null
 
   constructor(
     private root: HTMLElement,
     tools: Tool[],
     private onSelect: (id: string) => void,
-    initialId: string
+    initialId: string,
+    private scene?: Scene,
+    private requestRender?: () => void
   ) {
     this.loadCollapsed()
     this.root.innerHTML = ''
@@ -56,6 +61,12 @@ export class ToolPalette {
       this.renderGroup(cat, list)
     }
 
+    // Boolean sub-panel next to Workspace (only when scene provided)
+    if (this.scene && this.requestRender) {
+      this.renderBooleanSubPanel()
+      this.scene.subscribe(() => this.renderBooleanSubPanel())
+    }
+
     // Tool lister lives at the bottom of the sidebar.
     const listerTitle = document.createElement('h2')
     listerTitle.className = 'panel-title lister-title'
@@ -70,6 +81,105 @@ export class ToolPalette {
     this.renderLister()
 
     this.select(initialId)
+  }
+
+  private renderBooleanSubPanel(): void {
+    if (!this.scene || !this.requestRender) return
+    // Remove existing boolean container if any
+    if (this.booleanContainer) {
+      this.booleanContainer.remove()
+      this.booleanContainer = null
+    }
+    const workspaceBody = this.groupBodies.get('workspace')
+    const workspaceGroup = this.groupRoots.get('workspace')
+    if (!workspaceBody || !workspaceGroup) return
+
+    const container = document.createElement('div')
+    container.className = 'boolean-subpanel'
+    container.style.marginTop = '8px'
+    container.style.padding = '8px'
+    container.style.background = 'var(--panel-2)'
+    container.style.border = '1px solid var(--border)'
+    container.style.borderRadius = '8px'
+
+    const title = document.createElement('div')
+    title.className = 'section-title'
+    title.textContent = 'Boolean'
+    title.style.margin = '0 0 6px'
+    title.style.padding = '0'
+    title.style.border = 'none'
+    container.appendChild(title)
+
+    const selected = this.scene!.selected
+    const hint = document.createElement('span')
+    hint.className = 'hint'
+    hint.style.fontSize = '11px'
+    hint.style.display = 'block'
+    hint.style.marginBottom = '6px'
+
+    if (selected.length !== 2) {
+      hint.textContent =
+        selected.length === 0
+          ? 'Select 2 closed shapes/paths.'
+          : selected.length === 1
+            ? 'Select one more.'
+            : `${selected.length} selected — need exactly 2.`
+      container.appendChild(hint)
+      workspaceBody.appendChild(container)
+      this.booleanContainer = container
+      return
+    }
+
+    const [a, b] = selected as [(typeof selected)[0], (typeof selected)[0]]
+    hint.textContent = 'Combine 2 closed shapes/paths'
+    container.appendChild(hint)
+
+    const btnRow = document.createElement('div')
+    btnRow.style.display = 'flex'
+    btnRow.style.gap = '6px'
+    btnRow.style.flexWrap = 'wrap'
+    btnRow.style.marginTop = '6px'
+
+    const mkBtn = (
+      label: string,
+      op: 'union' | 'intersection' | 'difference',
+      title: string
+    ) => {
+      const btn = document.createElement('button')
+      btn.className = 'mini-btn'
+      btn.textContent = label
+      btn.title = title
+      btn.addEventListener('click', () => {
+        const result = booleanOp(a!, b!, op)
+        if (result === null) {
+          hint.textContent = 'Need 2 closed shapes/paths'
+          hint.style.color = '#ff6b6b'
+          return
+        }
+        this.scene!.remove(a!)
+        this.scene!.remove(b!)
+        if (result.length === 0) {
+          hint.textContent = 'Result empty — both removed'
+          hint.style.color = '#ff6b6b'
+          this.requestRender!()
+          return
+        }
+        for (const p of result) this.scene!.add(p)
+        this.scene!.clearSelection()
+        for (const p of result) this.scene!.select(p, true)
+        this.requestRender!()
+      })
+      return btn
+    }
+
+    btnRow.appendChild(mkBtn('Add', 'union', 'Union (A+B)'))
+    btnRow.appendChild(
+      mkBtn('Subtract', 'difference', 'Subtract B from A (A-B)')
+    )
+    btnRow.appendChild(mkBtn('Intersect', 'intersection', 'Intersection (A∩B)'))
+    container.appendChild(btnRow)
+    workspaceBody.appendChild(container)
+    this.booleanContainer = container
   }
 
   private renderGroup(cat: ToolCategory, tools: Tool[]): void {
