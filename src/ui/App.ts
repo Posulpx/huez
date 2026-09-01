@@ -264,14 +264,15 @@ export class App {
         e.altKey,
         e.ctrlKey || e.metaKey
       )
-      // Update active artboard: last element interacted with, or artboard under cursor
+      // Update active artboard: last element interacted with, or artboard under cursor;
+      // clicking on free space outside artboards clears active (artboards equal to free)
       const world = this.renderer.toWorld(e.clientX, e.clientY)
       const hit = this.scene.hitTest(world, this.renderer.scale)
       if (hit) {
         this.scene.updateActiveForElement(hit)
       } else {
         const ab = this.scene.artboardAtPoint(world)
-        if (ab) this.scene.setActiveArtboard(ab.id)
+        this.scene.setActiveArtboard(ab ? ab.id : null)
       }
     })
 
