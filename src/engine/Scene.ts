@@ -61,6 +61,10 @@ export class Scene {
     return this.selectedIds.has(element.id)
   }
 
+  deselect(element: BaseElement): void {
+    if (this.selectedIds.delete(element.id)) this.emit()
+  }
+
   // ---- Layer / z-order management -------------------------------------
 
   /** Elements ordered back-to-front (index 0 is the bottom layer). */
