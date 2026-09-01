@@ -216,23 +216,14 @@ export class CanvasRenderer {
     const y0 = Math.min(b.y, b.y + b.height)
     const w = Math.abs(b.width)
     const h = Math.abs(b.height)
-    ctx.lineWidth = 2 / this.scale
-    ctx.strokeStyle = '#ff8c00'
-    ctx.setLineDash([6 / this.scale, 3 / this.scale])
+    ctx.lineWidth = 1.5 / this.scale
+    ctx.strokeStyle = 'rgba(120, 220, 255, 0.45)'
     ctx.strokeRect(
-      x0 - 1 / this.scale,
-      y0 - 1 / this.scale,
-      w + 2 / this.scale,
-      h + 2 / this.scale
+      x0 - 0.5 / this.scale,
+      y0 - 0.5 / this.scale,
+      w + 1 / this.scale,
+      h + 1 / this.scale
     )
-    ctx.setLineDash([])
-    // Small label
-    ctx.fillStyle = 'rgba(255, 140, 0, 0.12)'
-    ctx.fillRect(x0, y0 - 14 / this.scale, 60 / this.scale, 14 / this.scale)
-    ctx.fillStyle = '#ff8c00'
-    ctx.font = `${10 / this.scale}px system-ui, sans-serif`
-    ctx.textBaseline = 'middle'
-    ctx.fillText('active', x0 + 4 / this.scale, y0 - 7 / this.scale)
     ctx.restore()
   }
 

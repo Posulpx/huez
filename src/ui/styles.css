@@ -356,6 +356,11 @@ body {
   background: #243049;
 }
 
+.layer-row.active-artboard {
+  border-color: rgba(120, 220, 255, 0.45);
+  background: rgba(120, 220, 255, 0.08);
+}
+
 .layer-row.child {
   margin-left: 14px;
   padding-left: 16px;
