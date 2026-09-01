@@ -26,7 +26,7 @@ export const HOTKEYS: Hotkey[] = [
   {
     keys: 'Ctrl/Cmd+A',
     description:
-      'Select all: artwork-specific if inside active artboard, otherwise free + artboards',
+      'Select all artwork in active artboard (last interacted artboard; click artboard to activate), otherwise free + artboards',
     when: 'global',
   },
   {

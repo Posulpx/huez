@@ -24,6 +24,7 @@ export class ArtboardTool implements Tool {
     this.draft = el
     ctx.scene.add(el)
     ctx.scene.select(el)
+    ctx.scene.setActiveArtboard(el.id)
     recordToolUsed(this.id, this.label)
     logApiCall(`scene.add`, `artboard (${el.id})`)
   }

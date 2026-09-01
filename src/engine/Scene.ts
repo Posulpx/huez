@@ -13,6 +13,7 @@ export class Scene {
   private elements: BaseElement[] = []
   private selectedIds = new Set<string>()
   private listeners = new Set<SceneListener>()
+  private _activeArtboardId: string | null = null
 
   get all(): readonly BaseElement[] {
     return this.elements
@@ -63,6 +64,49 @@ export class Scene {
 
   deselect(element: BaseElement): void {
     if (this.selectedIds.delete(element.id)) this.emit()
+  }
+
+  get activeArtboardId(): string | null {
+    return this._activeArtboardId
+  }
+
+  get activeArtboard(): ArtboardElement | null {
+    if (!this._activeArtboardId) return null
+    const el = this.getElementById(this._activeArtboardId)
+    return el instanceof ArtboardElement ? el : null
+  }
+
+  setActiveArtboard(id: string | null): void {
+    if (this._activeArtboardId === id) return
+    // Validate id is an artboard or null
+    if (id !== null) {
+      const el = this.getElementById(id)
+      if (!(el instanceof ArtboardElement)) return
+    }
+    this._activeArtboardId = id
+    this.emit()
+  }
+
+  setActiveArtboardAtPoint(p: Point): void {
+    const ab = this.artboardAtPoint(p)
+    this.setActiveArtboard(ab ? ab.id : null)
+  }
+
+  updateActiveForElement(el: BaseElement | null): void {
+    if (!el) {
+      // No element, don't change active (or set to null if clicked on empty free area)
+      return
+    }
+    if (el instanceof ArtboardElement) {
+      this.setActiveArtboard(el.id)
+    } else if (el.artboardId) {
+      this.setActiveArtboard(el.artboardId)
+    } else {
+      // Free element: check if it's inside any artboard's bounds (for elements not yet assigned but visually inside)
+      const ab = this.artboardAtPoint({ x: el.x, y: el.y })
+      if (ab) this.setActiveArtboard(ab.id)
+      // Otherwise keep current active (don't clear on free element outside)
+    }
   }
 
   // ---- Layer / z-order management -------------------------------------

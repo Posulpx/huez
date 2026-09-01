@@ -144,12 +144,16 @@ export class SelectTool implements Tool {
           }
         }
         ctx.scene.select(target, ctx.shiftKey)
+        ctx.scene.updateActiveForElement(target)
         logApiCall(`scene.select`, target.id)
       } else if (ctx.shiftKey) {
         // Shift+click on selected element deselects it
         ctx.scene.deselect(target)
         logApiCall(`scene.deselect`, target.id)
         return
+      } else {
+        // Click on already selected element still makes its artboard active
+        ctx.scene.updateActiveForElement(target)
       }
       // An artboard moves only when grabbed by its label. The edges are a
       // select-only handle, so accidental drags of the board are prevented.

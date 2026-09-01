@@ -35,7 +35,9 @@ export class LayerPanel {
         `${e.id}:${e.visible ? 1 : 0}:${e.locked ? 1 : 0}:${e.artboardId ?? ''}`
     )
     const sel = [...this.scene.selected].map((e) => e.id).join(',')
-    return parts.join('|') + '#' + sel
+    return (
+      parts.join('|') + '#' + sel + '#' + (this.scene.activeArtboardId ?? '')
+    )
   }
 
   private render(): void {
@@ -90,13 +92,18 @@ export class LayerPanel {
     const row = document.createElement('div')
     row.className = 'layer-row' + (depth > 0 ? ' child' : '')
     row.draggable = true
-    if (el instanceof ArtboardElement) row.classList.add('is-artboard')
+    if (el instanceof ArtboardElement) {
+      row.classList.add('is-artboard')
+      if (this.scene.activeArtboardId === el.id)
+        row.classList.add('active-artboard')
+    }
     if (this.scene.isSelected(el)) row.classList.add('active')
 
     row.addEventListener('click', (e) => {
       // Avoid re-selecting when interacting with a control inside the row.
       if ((e.target as HTMLElement).closest('.layer-controls')) return
       this.scene.select(el)
+      this.scene.updateActiveForElement(el)
     })
 
     this.bindDrag(row, el)

@@ -159,6 +159,9 @@ export class CanvasRenderer {
       if (el.visible) el.draw(ctx)
     }
 
+    // Active artboard highlight — subtle outline for the last interacted artboard
+    this.drawActiveArtboardHighlight(scene)
+
     // Selection overlays are never clipped — bounds/handles stay visible.
     this.drawSelectionOverlay(scene)
 
@@ -198,6 +201,38 @@ export class CanvasRenderer {
     ctx.strokeStyle = '#4f8cff'
     ctx.setLineDash([4 / this.scale, 4 / this.scale])
     ctx.strokeRect(x, y, w, h)
+    ctx.restore()
+  }
+
+  private drawActiveArtboardHighlight(scene: Scene): void {
+    const activeId = scene.activeArtboardId
+    if (!activeId) return
+    const ab = scene.getElementById(activeId)
+    if (!(ab instanceof ArtboardElement) || !ab.visible) return
+    const { ctx } = this
+    ctx.save()
+    const b = ab.bounds
+    const x0 = Math.min(b.x, b.x + b.width)
+    const y0 = Math.min(b.y, b.y + b.height)
+    const w = Math.abs(b.width)
+    const h = Math.abs(b.height)
+    ctx.lineWidth = 2 / this.scale
+    ctx.strokeStyle = '#ff8c00'
+    ctx.setLineDash([6 / this.scale, 3 / this.scale])
+    ctx.strokeRect(
+      x0 - 1 / this.scale,
+      y0 - 1 / this.scale,
+      w + 2 / this.scale,
+      h + 2 / this.scale
+    )
+    ctx.setLineDash([])
+    // Small label
+    ctx.fillStyle = 'rgba(255, 140, 0, 0.12)'
+    ctx.fillRect(x0, y0 - 14 / this.scale, 60 / this.scale, 14 / this.scale)
+    ctx.fillStyle = '#ff8c00'
+    ctx.font = `${10 / this.scale}px system-ui, sans-serif`
+    ctx.textBaseline = 'middle'
+    ctx.fillText('active', x0 + 4 / this.scale, y0 - 7 / this.scale)
     ctx.restore()
   }
 

@@ -115,6 +115,7 @@ export class PenTool implements Tool {
         this.path.cursor = p
         this.path.editing = false
         ctx.scene.select(cand, false)
+        ctx.scene.updateActiveForElement(cand)
         this.hoveredEndpoint = null
         ;(
           ctx.renderer as unknown as { setPenHover: (h: unknown) => void }
@@ -127,9 +128,13 @@ export class PenTool implements Tool {
       path.drafting = true
       // Auto-assign to artboard under creation point, if any.
       const ab = ctx.scene.artboardAtPoint(p)
-      if (ab) path.artboardId = ab.id
+      if (ab) {
+        path.artboardId = ab.id
+        ctx.scene.setActiveArtboard(ab.id)
+      }
       this.activeIndex = path.addAnchor(p)
       ctx.scene.add(path)
+      ctx.scene.updateActiveForElement(path)
       this.path = path
       this.dragging = true
       this.dragStart = p

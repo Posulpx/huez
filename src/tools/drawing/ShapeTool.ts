@@ -32,10 +32,14 @@ export class ShapeTool implements Tool {
     const el = new ShapeElement(this.kind, ctx.point.x, ctx.point.y, 0, 0)
     // Auto-assign to the artboard under the creation point, if any.
     const ab = ctx.scene.artboardAtPoint(ctx.point)
-    if (ab) el.artboardId = ab.id
+    if (ab) {
+      el.artboardId = ab.id
+      ctx.scene.setActiveArtboard(ab.id)
+    }
     this.draft = el
     ctx.scene.add(el)
     ctx.scene.select(el)
+    ctx.scene.updateActiveForElement(el)
     recordToolUsed(this.id, this.label)
     logApiCall(`scene.add`, `shape:${this.kind} (${el.id})`)
   }

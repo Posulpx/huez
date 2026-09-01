@@ -77,6 +77,7 @@ export class App {
     const a4 = new ArtboardElement(120, 120, 794, 1123)
     a4.name = 'Artboard 1'
     this.scene.add(a4)
+    this.scene.setActiveArtboard(a4.id)
     this.history.push()
 
     new ToolPalette(
@@ -176,6 +177,7 @@ export class App {
         e.preventDefault()
         if (this.pathEditor.isEditing()) this.pathEditor.commit()
         this.scene.select(hit)
+        this.scene.updateActiveForElement(hit)
         this.textEditor.startEdit(hit)
         this.render()
         return
@@ -186,8 +188,17 @@ export class App {
         e.preventDefault()
         if (this.textEditor.isEditing()) this.textEditor.commit()
         this.scene.select(hit)
+        this.scene.updateActiveForElement(hit)
         this.pathEditor.startEdit(hit)
         this.render()
+      }
+      // Clicking on artboard (empty area) also makes it active
+      const abAtPoint = this.scene.artboardAtPoint(world)
+      if (abAtPoint) {
+        this.scene.setActiveArtboard(abAtPoint.id)
+      } else if (!hit) {
+        // Clicked on free space outside any artboard — keep current active or set to null?
+        // For now, don't clear active on free space click
       }
     })
 
@@ -253,6 +264,15 @@ export class App {
         e.altKey,
         e.ctrlKey || e.metaKey
       )
+      // Update active artboard: last element interacted with, or artboard under cursor
+      const world = this.renderer.toWorld(e.clientX, e.clientY)
+      const hit = this.scene.hitTest(world, this.renderer.scale)
+      if (hit) {
+        this.scene.updateActiveForElement(hit)
+      } else {
+        const ab = this.scene.artboardAtPoint(world)
+        if (ab) this.scene.setActiveArtboard(ab.id)
+      }
     })
 
     canvas.addEventListener('pointermove', (e) => {
@@ -380,24 +400,23 @@ export class App {
       // Select All: Ctrl/Cmd+A — artwork-specific if inside active artboard, otherwise free + artboards
       if (isSelectAll(e)) {
         e.preventDefault()
-        const selected = this.scene.selected
-        let targetArtboardId: string | null | undefined
-        if (selected.length > 0) {
-          targetArtboardId = selected[0]!.artboardId
-        } else {
-          // No selection: consider outside (free)
-          targetArtboardId = null
-        }
+        const activeId = this.scene.activeArtboardId
         this.scene.clearSelection()
-        if (targetArtboardId !== undefined && targetArtboardId !== null) {
-          // Inside active artboard: select all elements assigned to that artboard
+        if (activeId) {
+          // Inside active artboard: select all artwork assigned to it
           for (const el of this.scene.all) {
-            if (el.artboardId === targetArtboardId) {
+            if (el.artboardId === activeId) {
               this.scene.select(el, true)
             }
           }
+          // Also select the artboard itself if you want? No, just artwork
+          // If no artwork, still show artboard as active but don't select it
+          if (this.scene.selected.length === 0) {
+            const ab = this.scene.getElementById(activeId)
+            if (ab) this.scene.select(ab, true)
+          }
         } else {
-          // Outside: select free elements + artboards
+          // Outside (no active artboard or free): select free elements + all artboards
           for (const el of this.scene.all) {
             if (el instanceof ArtboardElement || !el.artboardId) {
               this.scene.select(el, true)
