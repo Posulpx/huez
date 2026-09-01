@@ -48,10 +48,8 @@ export class ShapeTool implements Tool {
     const py = ctx.point.y
 
     if (this.kind === 'line') {
-      // Lines use signed deltas so they can point in any direction.
       let w = px - sx
       let h = py - sy
-      // Shift: constrain the line angle to 45° increments (0°/45°/90°/…).
       if (ctx.shiftKey) {
         const ang = Math.atan2(h, w)
         const len = Math.hypot(w, h)
@@ -59,18 +57,35 @@ export class ShapeTool implements Tool {
         w = Math.cos(snapped) * len
         h = Math.sin(snapped) * len
       }
-      this.draft.moveTo(sx, sy)
-      this.draft.width = w
-      this.draft.height = h
+      // Alt: center pivot for line — keep start as center
+      if (ctx.altKey) {
+        this.draft.moveTo(sx - w / 2, sy - h / 2)
+        this.draft.width = w
+        this.draft.height = h
+      } else {
+        this.draft.moveTo(sx, sy)
+        this.draft.width = w
+        this.draft.height = h
+      }
     } else {
-      const x = Math.min(sx, px)
-      const y = Math.min(sy, py)
+      let x = Math.min(sx, px)
+      let y = Math.min(sy, py)
       let w = Math.abs(px - sx)
       let h = Math.abs(py - sy)
       if (ctx.shiftKey) {
         const s = Math.max(w, h)
         w = s
         h = s
+        // Keep anchor at start for square lock
+        x = sx <= px ? sx : sx - w
+        y = sy <= py ? sy : sy - h
+      }
+      if (ctx.altKey) {
+        // Center pivot: keep start as center, anchor stays at center
+        const cx = sx
+        const cy = sy
+        x = cx - w / 2
+        y = cy - h / 2
       }
       this.draft.moveTo(x, y)
       this.draft.width = w
