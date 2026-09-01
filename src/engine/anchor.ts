@@ -42,8 +42,10 @@ export function setElementAnchorWorld(
   const s = Math.sin(rot)
   const vx = dx * c - dy * s
   const vy = dx * s + dy * c
-  el.x = target.x - vx - w / 2
-  el.y = target.y - vy - h / 2
+  const nx = target.x - vx - w / 2
+  const ny = target.y - vy - h / 2
+  // For PathElement, moveTo correctly shifts points; direct x/y assignment would not move the path
+  el.moveTo(nx, ny)
 }
 
 /**
