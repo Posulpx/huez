@@ -477,6 +477,10 @@ work by area; this log is the plain-English change history.
 - `src/engine/booleanOpsPaper.ts:1` — new paper.js based boolean (`toPaperPath` with `storedToWorld` + relative `handleIn`/`handleOut`, `paperPathToPathElement` preserves `hIn`/`hOut`, `extractPaths` handles `CompoundPath`); `src/engine/booleanOps.ts:1` now tries `booleanOpPaper` first (fewer nodes, preserves original Bézier segments) then falls back to `polygon-clipping` (24 steps).
 - `package.json:10` — added `paper@^0.12.18` for handle-preserving boolean; `vite build` 112.77 kB → 357.84 kB (paper) but union of 2 rects now 8 points vs 100+ before, ellipse union preserves curves.
 - Verified `npx tsc --noEmit`, `vite build`, manual: 2 overlapping rects Add → 8-point L-shape (was 100+), ellipse Add preserves handles, Subtract/Intersect correct, open paths still rejected.
+### P36 — Seamless Vercel deployment ✅
+- `patch` bump `0.4.1 → 0.4.2` via `scripts/bump.mjs patch` (2026-09-01).
+- `vercel.json:1` — `buildCommand: npm run build`, `outputDirectory: dist`, `framework: vite`, `rewrites` SPA fallback to `/index.html`, `headers` cache for `/assets/*`; `package.json:10` `engines: node >=18` + `vercel-build` script; `README.md:27` Deploy to Vercel button + framework/build/output docs.
+- Verified `npx tsc --noEmit`, `vite build` (373.09 → 375.48 kB with vercel config), manual: `vercel --prod` and push to `master` auto-deploys.
 ## Known Limitations
 - ✅ Resizing / rotating an **artboard** now re-anchors its assigned children
   (see M6) — this closes the old "children don't follow the artboard" gap.
