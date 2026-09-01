@@ -12,7 +12,7 @@ it with new primitives without fighting the core.
 - **Engine core** — scene graph, DPR-aware `CanvasRenderer` (selection overlay, pen node awareness, marquee), `TransformHandles`, 9-point `anchor` relative to artboard, `shapeToPath` (KAPPA), `booleanOps` (Add/Subtract/Intersect via `polygon-clipping` + `paper.js` bezier-preserving).
 - **Element modules** — `TextElement` (tight ink, multiline, in-line editing), `ShapeElement` (rect/ellipse/line), `ArtboardElement` (label band + edge hit, clips children, 18px label), `PathElement` (cubic Bézier `PathAnchor` `hIn`/`hOut`, open/closed, drafting `resumeEnd`/`closingTarget`/`closingHover`, `hitAnchor`/`closestSegmentInfo`, `flatten` 16–24 steps).
 - **Tool modules** — `SelectTool` (select/scale/rotate, artboard-aware, marquee), `ShapeTool`/`TextTool`/`ArtboardTool`/`PanTool`, `PenTool` (Bézier pen: open/close, symmetrical `Ctrl` opposite + `Alt` single, artboard auto-assign, node awareness, connect-any-open, proximity highlight).
-- **UI shell** — 5-col grid (`180px | 180px | 1fr | 220px | 280px`): left **tool palette** (collapsible Geometry/Interaction/Workspace) + **boolean panel** next to workspace, center **stage** canvas, right **layers** + **properties** sidebar (fill/stroke/opacity/rotation/shadow, artboard/anchor, Convert to Path), floating **Activity console** + **TextEditor** overlay + **PathEditor** vertex editing.
+- **UI shell** — 4-col grid (`180px | 1fr | 220px | 280px`): left **tool palette** (collapsible Geometry/Interaction/Workspace + **boolean sub-panel next to Workspace**), center **stage** canvas, right **layers** + **properties** sidebar (fill/stroke/opacity/rotation/shadow, artboard/anchor, Convert to Path), floating **Activity console** + **TextEditor** overlay + **PathEditor** vertex editing. Tool lister hidden for now.
 - Strict **TypeScript 6** with `verbatimModuleSyntax` and isolated modules.
 
 ## Getting started
@@ -27,61 +27,59 @@ npm run preview  # preview the production build
 ## Project layout
 
 ```
+HueZ Canvas Tool Modules
+│
+├── Drawing Tools
+│   ├── PenTool.ts        → Precision path creation, anchors, bezier curves
+│   ├── PencilTool.ts     → Freehand sketching, smoothing (Chaikin/Douglas-Peucker)
+│   └── ShapeTool.ts      → Rectangles, ellipses, polygons
+│
+├── Layout Tools
+│   ├── ArtboardTool.ts   → Multi-artboard management, alt+drag duplication
+│   ├── AlignTool.ts      → 9-point element anchors, snapping
+│   └── GridTool.ts       → Guides, rulers, layout grids
+│
+├── Management Tools
+│   ├── SelectionTool.ts  → Multi-select, group/ungroup, marquee, group transform as one
+│   ├── TransformTool.ts  → Scale, rotate, skew (group-aware)
+│   └── LayerTool.ts      → Hierarchy control, visibility toggles
+│
+└── Utility Tools
+    ├── ColorTool.ts      → Fill, stroke, palette management (eyedropper)
+    ├── ExportTool.ts     → Output to SVG/PNG
+    └── HistoryTool.ts    → Undo/redo stack (History + Clipboard, Ctrl+Z/Y/C/V)
+
 src/
-├─ engine/              # rendering core (no DOM-tooling dependencies)
-│  ├─ types.ts          # Point, Bounds, ElementStyle, ShadowStyle, ShapeKind
-│  ├─ BaseElement.ts    # transform + style + hit-testing + artboardId/anchor/rotation
-│  ├─ Scene.ts          # scene graph, selection, z-order, artboardAtPoint, replace
-│  ├─ CanvasRenderer.ts # DPR-aware rendering + selection overlay + pen node awareness
-│  ├─ TransformHandles.ts
-│  ├─ anchor.ts         # 9-point artboard anchoring
-│  ├─ shapeToPath.ts    # primitive → PathElement (KAPPA ellipse)
-│  ├─ booleanOps.ts     # Add/Subtract/Intersect (polygon-clipping + paper.js)
-│  └─ booleanOpsPaper.ts# paper.js bezier-preserving boolean
-├─ elements/            # the "tool modules" (extend BaseElement)
-│  ├─ ArtboardElement.ts
-│  ├─ TextElement.ts    # tight ink bounds, multiline, editing flag
-│  ├─ ShapeElement.ts   # rect/ellipse/line
-│  ├─ PathElement.ts    # Bézier path (PathAnchor hIn/hOut, drafting, closingTarget/Hover)
-│  └─ index.ts
-├─ tools/               # pointer-driven tools
-│  ├─ Tool.ts           # Tool + ToolContext (shiftKey/altKey/ctrlKey)
-│  ├─ ToolManager.ts    # register/unregister, makeContext with ctrlKey
-│  ├─ SelectTool.ts     # select/scale/rotate, artboard-aware
-│  ├─ ShapeTool.ts      # rect/ellipse/line + artboard auto-assign
-│  ├─ TextTool.ts       # text + artboard auto-assign + TextEditor
-│  ├─ ArtboardTool.ts
-│  ├─ PanTool.ts
-│  ├─ PenTool.ts        # Bézier pen (open/close, handles, node awareness, connect)
-│  ├─ log.ts
-│  └─ records.ts
+├─ engine/
+│  ├─ types.ts, BaseElement.ts, Scene.ts, CanvasRenderer.ts, TransformHandles.ts
+│  ├─ anchor.ts, shapeToPath.ts, booleanOps.ts, booleanOpsPaper.ts
+│  ├─ history.ts         # snapshot undo/redo (clone + ID-mapped selection)
+│  └─ clipboard.ts       # copy/paste to selected dashboards, preserve coords
+├─ elements/            # ArtboardElement, TextElement, ShapeElement, PathElement
 └─ ui/
-   ├─ App.ts            # wires engine + tools + panels (5-col grid)
-   ├─ ToolPalette.ts    # left tool buttons (collapsible Geometry/Interaction/Workspace)
-   ├─ BooleanPanel.ts   # left boolean panel next to workspace (Add/Subtract/Intersect)
-   ├─ PropertiesPanel.ts# right properties sidebar + Convert to Path
-   ├─ LayerPanel.ts
-   ├─ ActivityPanel.ts
-   ├─ TextEditor.ts
-   ├─ PathEditor.ts     # vertex/handle editing
-   ├─ styles.css        # 5-col grid: palette | boolean | stage | layers | properties
-   └─ main.ts           # bootstrap (palette, boolean, layers, props, activity)
+   ├─ App.ts            # 4-col grid (180px | 1fr | 220px | 280px), wires all
+   ├─ ToolPalette.ts    # collapsible groups + boolean sub-panel next to Workspace
+   ├─ BooleanPanel.ts   # (legacy) now embedded as sub-panel in ToolPalette Workspace
+   ├─ PropertiesPanel.ts# Convert to Path, style controls
+   ├─ PathEditor.ts, TextEditor.ts, LayerPanel.ts, ActivityPanel.ts
+   └─ styles.css        # panel + tool lister (hidden) + boolean-subpanel
 ```
 
 ## Architecture
 
 ```
 ┌──────────────────────────────────┐   pointer events   ┌──────────────┐   mutates   ┌────────┐
-│     UI (5-col grid)              │ ─────────────────▶ │ ToolManager  │ ──────────▶ │ Scene  │
-│ Palette | Boolean | Stage |      │                    │  (active     │             │(graph) │
-│ Layers | Properties + Activity   │ ◀──── renders ───── │   Tool)      │ ◀─ notify ──│        │
+│     UI (4-col grid)              │ ─────────────────▶ │ ToolManager  │ ──────────▶ │ Scene  │
+│ Palette(+Boolean next to         │                    │  (active     │             │(graph) │
+│ Workspace) | Stage | Layers |    │ ◀──── renders ───── │   Tool)      │ ◀─ notify ──│        │
+│ Properties + Activity            │                    │              │             │        │
 └──────────────────────────────────┘                    └──────────────┘             └───┬────┘
                                                                      │ draws
                                                              ┌───────▼───────┐
                                                              │ CanvasRenderer│
                                                              └───────────────┘
 ```
-- Grid: `180px (palette) | 180px (boolean) | 1fr (stage) | 220px (layers) | 280px (properties)` — boolean panel lives next to workspace (left sidebar).
+- Grid: `180px (palette incl. boolean sub-panel next to Workspace) | 1fr (stage) | 220px (layers) | 280px (properties)`.
 
 - **`ElementStyle`** maps 1:1 onto Canvas 2D API properties
   (`fillStyle`, `strokeStyle`, `shadowColor`, `shadowBlur`, …), so new style
