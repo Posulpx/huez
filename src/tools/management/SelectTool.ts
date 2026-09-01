@@ -719,48 +719,9 @@ export class SelectTool implements Tool {
         if (ctx.shiftKey) {
           el.rotation = Math.round(el.rotation / (Math.PI / 4)) * (Math.PI / 4)
         }
-        // Move element so its center is at newCx,newCy
+        // Move element so its center is at newCx,newCy — for PathElement, moveTo will shift points correctly
         const b = el.bounds
         el.moveTo(newCx - b.width / 2, newCy - b.height / 2)
-        // For PathElement, need to rotate points around group center as well
-        if (el instanceof PathElement) {
-          const snap = g.elements.find((e) => e.el === el)?.pathSnapshot
-          if (snap) {
-            for (let i = 0; i < el.points.length; i++) {
-              const p = el.points[i]!
-              const sp = snap[i]!
-              // Rotate point around group center
-              const px = sp.x - cx
-              const py = sp.y - cy
-              const rx2 = px * c - py * s
-              const ry2 = px * s + py * c
-              p.x = cx + rx2
-              p.y = cy + ry2
-              if (sp.hIn) {
-                const hx = sp.hIn.x - cx
-                const hy = sp.hIn.y - cy
-                const rhx = hx * c - hy * s
-                const rhy = hx * s + hy * c
-                if (!p.hIn) p.hIn = { x: cx + rhx, y: cy + rhy }
-                else {
-                  p.hIn.x = cx + rhx
-                  p.hIn.y = cy + rhy
-                }
-              } else p.hIn = null
-              if (sp.hOut) {
-                const hx = sp.hOut.x - cx
-                const hy = sp.hOut.y - cy
-                const rhx = hx * c - hy * s
-                const rhy = hx * s + hy * c
-                if (!p.hOut) p.hOut = { x: cx + rhx, y: cy + rhy }
-                else {
-                  p.hOut.x = cx + rhx
-                  p.hOut.y = cy + rhy
-                }
-              } else p.hOut = null
-            }
-          }
-        }
       }
       ctx.requestRender()
       return
@@ -861,7 +822,7 @@ export class SelectTool implements Tool {
         el.x = newElCx - newW / 2
         el.y = newElCy - newH / 2
       } else if (el instanceof PathElement) {
-        // Scale points from group
+        // Scale points from group — keep x/y in sync with new bounds top-left
         const snap = pathSnapshot
         if (!snap) continue
         for (let i = 0; i < el.points.length; i++) {
@@ -890,12 +851,7 @@ export class SelectTool implements Tool {
             }
           } else a.hOut = null
         }
-        // Update x/y to new center for moveTo semantics (path's x/y is not directly used for bounds, but for consistency)
         const newB = el.bounds
-        el.moveTo(newB.x, newB.y)
-        // The points are already at world positions, moveTo will shift them, so we need to undo that shift
-        // Actually bounds is computed from points, and moveTo shifts points, so we should not call moveTo after scaling points
-        // Instead, we already set points to world positions, so we should set x/y to newB.x/y without shifting points
         ;(el as unknown as { x: number }).x = newB.x
         ;(el as unknown as { y: number }).y = newB.y
       } else {
