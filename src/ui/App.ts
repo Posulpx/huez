@@ -2,12 +2,20 @@ import { Scene } from '../engine/Scene'
 import { ArtboardElement } from '../elements/ArtboardElement'
 import { CanvasRenderer } from '../engine/CanvasRenderer'
 import { ToolManager } from '../tools/ToolManager'
-import { SelectTool } from '../tools/SelectTool'
-import { ShapeTool } from '../tools/ShapeTool'
+import { SelectTool } from '../tools/management/SelectTool'
+import { ShapeTool } from '../tools/drawing/ShapeTool'
 import { TextTool } from '../tools/TextTool'
-import { ArtboardTool } from '../tools/ArtboardTool'
+import { ArtboardTool } from '../tools/layout/ArtboardTool'
 import { PanTool } from '../tools/PanTool'
-import { PenTool } from '../tools/PenTool'
+import { PenTool } from '../tools/drawing/PenTool'
+import { PencilTool } from '../tools/drawing/PencilTool'
+import { AlignTool } from '../tools/layout/AlignTool'
+import { GridTool } from '../tools/layout/GridTool'
+import { TransformTool } from '../tools/management/TransformTool'
+import { LayerTool } from '../tools/management/LayerTool'
+import { ColorTool } from '../tools/utility/ColorTool'
+import { ExportTool } from '../tools/utility/ExportTool'
+import { HistoryTool } from '../tools/utility/HistoryTool'
 import { ToolPalette } from './ToolPalette'
 import { PropertiesPanel } from './PropertiesPanel'
 import { LayerPanel } from './LayerPanel'
@@ -111,14 +119,27 @@ export class App {
   }
 
   private registerTools(): void {
+    // Management
     this.tools.register(new SelectTool())
+    this.tools.register(new TransformTool())
+    this.tools.register(new LayerTool())
+    // Drawing
+    this.tools.register(new PenTool())
+    this.tools.register(new PencilTool())
     this.tools.register(new ShapeTool('rectangle', 'Rectangle', '▭'))
     this.tools.register(new ShapeTool('ellipse', 'Ellipse', '◯'))
     this.tools.register(new ShapeTool('line', 'Line', '╱'))
     this.tools.register(new TextTool(this.textEditor))
+    // Layout
     this.tools.register(new ArtboardTool())
+    this.tools.register(new AlignTool())
+    this.tools.register(new GridTool())
+    // Utility
+    this.tools.register(new ColorTool())
+    this.tools.register(new ExportTool())
+    this.tools.register(new HistoryTool())
+    // Legacy
     this.tools.register(new PanTool())
-    this.tools.register(new PenTool())
   }
 
   private bindCanvas(): void {

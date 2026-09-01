@@ -35,7 +35,8 @@ export class ToolPalette {
     private onSelect: (id: string) => void,
     initialId: string,
     private scene?: Scene,
-    private requestRender?: () => void
+    private requestRender?: () => void,
+    private history?: import('../engine/history').History
   ) {
     this.loadCollapsed()
     this.root.innerHTML = ''
@@ -156,6 +157,7 @@ export class ToolPalette {
           hint.style.color = '#ff6b6b'
           return
         }
+        this.history?.push()
         this.scene!.remove(a!)
         this.scene!.remove(b!)
         if (result.length === 0) {
