@@ -67,7 +67,15 @@ export class PathElement extends BaseElement {
   /** Append an anchor at a world point (corner by default). Returns its index. */
   addAnchor(world: Point): number {
     this.points.push({ x: world.x, y: world.y, hIn: null, hOut: null })
+    this.syncPosition()
     return this.points.length - 1
+  }
+
+  private syncPosition(): void {
+    if (this.points.length === 0) return
+    const b = this.bounds
+    this.x = b.x
+    this.y = b.y
   }
 
   /** Set the control handles for an anchor from world-space points. */
@@ -84,9 +92,14 @@ export class PathElement extends BaseElement {
 
   /** Move the whole path by shifting every stored world coordinate. */
   override moveTo(x: number, y: number): void {
-    const dx = x - this.x
-    const dy = y - this.y
-    super.moveTo(x, y)
+    // Use bounds top-left as reference, not this.x (which is first anchor)
+    const b = this.points.length === 0 ? { x: this.x, y: this.y } : this.bounds
+    const dx = x - b.x
+    const dy = y - b.y
+    // Keep x/y in sync with bounds top-left for anchoring
+    this.x = x
+    this.y = y
+    // super.moveTo would set x/y again, but we already did, so just shift points
     for (const p of this.points) {
       p.x += dx
       p.y += dy
@@ -102,6 +115,10 @@ export class PathElement extends BaseElement {
     if (this.cursor) {
       this.cursor.x += dx
       this.cursor.y += dy
+    }
+    if (this.closingCursor) {
+      this.closingCursor.x += dx
+      this.closingCursor.y += dy
     }
   }
 
@@ -452,6 +469,7 @@ export class PathElement extends BaseElement {
     // Insert after `segmentIndex` (so for closing gap push to end)
     if (this.closed && segmentIndex === this.points.length - 1) {
       this.points.push({ x: stored.x, y: stored.y, hIn: null, hOut: null })
+      this.syncPosition()
       return this.points.length - 1
     }
     this.points.splice(idx, 0, {
@@ -460,6 +478,7 @@ export class PathElement extends BaseElement {
       hIn: null,
       hOut: null,
     })
+    this.syncPosition()
     return idx
   }
 
@@ -469,6 +488,7 @@ export class PathElement extends BaseElement {
     if (this.editingSelected >= this.points.length) this.editingSelected = -1
     else if (this.editingSelected === index) this.editingSelected = -1
     else if (this.editingSelected > index) this.editingSelected--
+    this.syncPosition()
   }
 
   /** Sample the B├⌐zier path into a polyline of world-space points. */
