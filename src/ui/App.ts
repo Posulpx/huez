@@ -9,11 +9,12 @@ import { ArtboardTool } from '../tools/layout/ArtboardTool'
 import { PanTool } from '../tools/PanTool'
 import { PenTool } from '../tools/drawing/PenTool'
 import { PencilTool } from '../tools/drawing/PencilTool'
-import { AlignTool } from '../tools/layout/AlignTool'
-import { GridTool } from '../tools/layout/GridTool'
-import { TransformTool } from '../tools/management/TransformTool'
-import { LayerTool } from '../tools/management/LayerTool'
-import { ColorTool } from '../tools/utility/ColorTool'
+// AlignTool, GridTool, TransformTool, LayerTool, ColorTool hidden for now
+// import { AlignTool } from '../tools/layout/AlignTool'
+// import { GridTool } from '../tools/layout/GridTool'
+// import { TransformTool } from '../tools/management/TransformTool'
+// import { LayerTool } from '../tools/management/LayerTool'
+// import { ColorTool } from '../tools/utility/ColorTool'
 import { ExportTool } from '../tools/utility/ExportTool'
 import { HistoryTool } from '../tools/utility/HistoryTool'
 import { ToolPalette } from './ToolPalette'
@@ -121,8 +122,9 @@ export class App {
   private registerTools(): void {
     // Management
     this.tools.register(new SelectTool())
-    this.tools.register(new TransformTool())
-    this.tools.register(new LayerTool())
+    // TransformTool and LayerTool hidden for now — use SelectTool + LayerPanel instead
+    // this.tools.register(new TransformTool())
+    // this.tools.register(new LayerTool())
     // Drawing
     this.tools.register(new PenTool())
     this.tools.register(new PencilTool())
@@ -132,10 +134,12 @@ export class App {
     this.tools.register(new TextTool(this.textEditor))
     // Layout
     this.tools.register(new ArtboardTool())
-    this.tools.register(new AlignTool())
-    this.tools.register(new GridTool())
+    // AlignTool and GridTool hidden for now — not yet in development
+    // this.tools.register(new AlignTool())
+    // this.tools.register(new GridTool())
     // Utility
-    this.tools.register(new ColorTool())
+    // ColorTool hidden for now — use PropertiesPanel instead
+    // this.tools.register(new ColorTool())
     this.tools.register(new ExportTool())
     this.tools.register(new HistoryTool())
     // Legacy
