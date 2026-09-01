@@ -553,6 +553,12 @@ body {
   margin-bottom: 8px;
 }
 
+/* ---- Tool lister (hidden for now) ---- */
+.tool-lister,
+.lister-title {
+  display: none !important;
+}
+
 /* ---- Tool lister (bottom of left sidebar) ---- */
 .lister-title {
   margin-top: 18px;
