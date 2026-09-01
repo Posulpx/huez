@@ -24,6 +24,7 @@ import { ActivityPanel } from './ActivityPanel'
 import { TextEditor } from './TextEditor'
 import { History } from '../engine/history'
 import { Clipboard } from '../engine/clipboard'
+import { isSelectAll } from '../engine/hotkeys'
 import { TextElement } from '../elements/TextElement'
 import { PathEditor } from './PathEditor'
 import { PathElement } from '../elements/PathElement'
@@ -374,6 +375,36 @@ export class App {
           this.clipboard.paste(this.scene)
           this.render()
         }
+        return
+      }
+      // Select All: Ctrl/Cmd+A — artwork-specific if inside active artboard, otherwise free + artboards
+      if (isSelectAll(e)) {
+        e.preventDefault()
+        const selected = this.scene.selected
+        let targetArtboardId: string | null | undefined
+        if (selected.length > 0) {
+          targetArtboardId = selected[0]!.artboardId
+        } else {
+          // No selection: consider outside (free)
+          targetArtboardId = null
+        }
+        this.scene.clearSelection()
+        if (targetArtboardId !== undefined && targetArtboardId !== null) {
+          // Inside active artboard: select all elements assigned to that artboard
+          for (const el of this.scene.all) {
+            if (el.artboardId === targetArtboardId) {
+              this.scene.select(el, true)
+            }
+          }
+        } else {
+          // Outside: select free elements + artboards
+          for (const el of this.scene.all) {
+            if (el instanceof ArtboardElement || !el.artboardId) {
+              this.scene.select(el, true)
+            }
+          }
+        }
+        this.render()
         return
       }
       // Delete: Delete or Backspace
