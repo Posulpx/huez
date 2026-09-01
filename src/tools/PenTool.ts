@@ -94,6 +94,7 @@ export class PenTool implements Tool {
     if (!this.path) {
       const hit = this.findOpenEndpointNear(p, ctx.renderer.scale, ctx.scene)
       if (hit) {
+        ctx.history?.push()
         const cand = hit.path
         this.path = cand
         this.path.drafting = true
@@ -121,6 +122,7 @@ export class PenTool implements Tool {
         ctx.requestRender()
         return
       }
+      ctx.history?.push()
       const path = new PathElement(p.x, p.y)
       path.drafting = true
       // Auto-assign to artboard under creation point, if any.

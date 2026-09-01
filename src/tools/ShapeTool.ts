@@ -28,6 +28,7 @@ export class ShapeTool implements Tool {
   }
 
   onPointerDown(ctx: ToolContext): void {
+    ctx.history?.push()
     const el = new ShapeElement(this.kind, ctx.point.x, ctx.point.y, 0, 0)
     // Auto-assign to the artboard under the creation point, if any.
     const ab = ctx.scene.artboardAtPoint(ctx.point)

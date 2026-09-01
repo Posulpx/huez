@@ -29,6 +29,25 @@ interface TransformState {
   }[]
 }
 
+interface GroupTransformState {
+  mode: 'scale' | 'rotate'
+  handle: HandleId
+  startRect: Rect
+  startAngle: number
+  elements: {
+    el: BaseElement
+    startRect: Rect
+    startRotation: number
+    fontSize: number
+    pathSnapshot?: {
+      x: number
+      y: number
+      hIn: { x: number; y: number } | null
+      hOut: { x: number; y: number } | null
+    }[]
+  }[]
+}
+
 /**
  * Selects elements (click or shift-click to multi-select), drags the
  * current selection, and — on a single selection — drives on-canvas
@@ -49,6 +68,7 @@ export class SelectTool implements Tool {
   private start: Point | null = null
   private origins = new Map<string, Point>()
   private transform: TransformState | null = null
+  private groupTransform: GroupTransformState | null = null
   private moved = false
   private clonedThisDrag = false
   private marquee: { x0: number; y0: number; x1: number; y1: number } | null =
@@ -90,6 +110,20 @@ export class SelectTool implements Tool {
         // Artboards cannot be rotated — ignore the rotate handle.
         if (hit === 'rotate' && selected[0] instanceof ArtboardElement) return
         this.beginTransform(ctx, selected[0]!, hit)
+        return
+      }
+    }
+
+    // Group handles for 2+ selection — scale/rotate as one
+    if (selected.length > 1) {
+      const groupHit = this.hitGroupHandle(ctx)
+      if (groupHit) {
+        // Don't allow rotate for group containing artboard? Allow but handle artboard rotation lock
+        const hasArtboard = selected.some((el) => el instanceof ArtboardElement)
+        if (groupHit === 'rotate' && hasArtboard) {
+          // Allow group rotate even with artboard? Artboards can't rotate individually, but group can
+        }
+        this.beginGroupTransform(ctx, groupHit)
         return
       }
     }
@@ -232,6 +266,7 @@ export class SelectTool implements Tool {
   }
 
   private beginDrag(ctx: ToolContext): void {
+    ctx.history?.push()
     this.dragging = true
     this.start = { ...ctx.point }
     this.origins.clear()
@@ -248,6 +283,118 @@ export class SelectTool implements Tool {
     }
   }
 
+  private groupRect(scene: ToolContext['scene']): Rect | null {
+    const sel = scene.selected
+    if (sel.length === 0) return null
+    let minX = Infinity,
+      minY = Infinity,
+      maxX = -Infinity,
+      maxY = -Infinity
+    for (const el of sel) {
+      const b = el.bounds
+      const x0 = Math.min(b.x, b.x + b.width)
+      const x1 = Math.max(b.x, b.x + b.width)
+      const y0 = Math.min(b.y, b.y + b.height)
+      const y1 = Math.max(b.y, b.y + b.height)
+      if (x0 < minX) minX = x0
+      if (y0 < minY) minY = y0
+      if (x1 > maxX) maxX = x1
+      if (y1 > maxY) maxY = y1
+    }
+    if (!isFinite(minX)) return null
+    return { x: minX, y: minY, w: maxX - minX, h: maxY - minY, rotation: 0 }
+  }
+
+  private hitGroupHandle(ctx: ToolContext): HandleId | null {
+    const g = this.groupRect(ctx.scene)
+    if (!g) return null
+    // Reuse handlePoints logic but for group rect
+    const pts = ((): { id: HandleId; x: number; y: number }[] => {
+      const r = g
+      const cx = r.x + r.w / 2
+      const cy = r.y + r.h / 2
+      const local = [
+        { id: 'nw' as HandleId, x: 0, y: 0 },
+        { id: 'n' as HandleId, x: r.w / 2, y: 0 },
+        { id: 'ne' as HandleId, x: r.w, y: 0 },
+        { id: 'e' as HandleId, x: r.w, y: r.h / 2 },
+        { id: 'se' as HandleId, x: r.w, y: r.h },
+        { id: 's' as HandleId, x: r.w / 2, y: r.h },
+        { id: 'sw' as HandleId, x: 0, y: r.h },
+        { id: 'w' as HandleId, x: 0, y: r.h / 2 },
+        { id: 'rotate' as HandleId, x: r.w / 2, y: -28 },
+      ]
+      return local.map((h) => {
+        let dx = h.x - r.w / 2
+        let dy = h.y - r.h / 2
+        if (r.rotation) {
+          const c = Math.cos(r.rotation)
+          const s = Math.sin(r.rotation)
+          const rx = dx * c - dy * s
+          const ry = dx * s + dy * c
+          dx = rx
+          dy = ry
+        }
+        return { id: h.id, x: dx + cx, y: dy + cy }
+      })
+    })()
+    for (const h of pts) {
+      const dx = ctx.point.x - h.x
+      const dy = ctx.point.y - h.y
+      if (dx * dx + dy * dy <= 8 * 8) return h.id
+    }
+    return null
+  }
+
+  private beginGroupTransform(ctx: ToolContext, handle: HandleId): void {
+    ctx.history?.push()
+    const g = this.groupRect(ctx.scene)
+    if (!g) return
+    const startAngle =
+      handle === 'rotate'
+        ? Math.atan2(
+            ctx.point.y - (g.y + g.h / 2),
+            ctx.point.x - (g.x + g.w / 2)
+          )
+        : 0
+    const elements = ctx.scene.selected.map((el) => {
+      const b = el.bounds
+      return {
+        el,
+        startRect: {
+          x: b.x,
+          y: b.y,
+          w: b.width,
+          h: b.height,
+          rotation: el.rotation,
+        },
+        startRotation: el.rotation,
+        fontSize: el instanceof TextElement ? el.fontSize : b.height,
+        pathSnapshot:
+          el instanceof PathElement
+            ? el.points.map((p) => ({
+                x: p.x,
+                y: p.y,
+                hIn: p.hIn ? { x: p.hIn.x, y: p.hIn.y } : null,
+                hOut: p.hOut ? { x: p.hOut.x, y: p.hOut.y } : null,
+              }))
+            : undefined,
+      }
+    })
+    this.groupTransform = {
+      mode: handle === 'rotate' ? 'rotate' : 'scale',
+      handle,
+      startRect: g,
+      startAngle,
+      elements,
+    }
+    logApiCall(
+      `select.group-${handle === 'rotate' ? 'rotate' : 'scale'}`,
+      handle
+    )
+    ctx.requestRender()
+  }
+
   private beginTransform(
     ctx: ToolContext,
     el: BaseElement,
@@ -255,6 +402,7 @@ export class SelectTool implements Tool {
   ): void {
     // Artboards are axis-aligned — no rotation handle.
     if (handle === 'rotate' && el instanceof ArtboardElement) return
+    ctx.history?.push()
     const b = el.bounds
     const start: Rect & { fontSize: number } = {
       x: b.x,
@@ -291,6 +439,10 @@ export class SelectTool implements Tool {
   }
 
   onPointerMove(ctx: ToolContext): void {
+    if (this.groupTransform) {
+      this.updateGroupTransform(ctx)
+      return
+    }
     if (this.transform) {
       this.updateTransform(ctx)
       return
@@ -522,6 +674,235 @@ export class SelectTool implements Tool {
     ctx.requestRender()
   }
 
+  private updateGroupTransform(ctx: ToolContext): void {
+    const g = this.groupTransform!
+    const startRect = g.startRect
+    const elements = g.elements
+
+    if (g.mode === 'rotate') {
+      const cx = startRect.x + startRect.w / 2
+      const cy = startRect.y + startRect.h / 2
+      const angle = Math.atan2(ctx.point.y - cy, ctx.point.x - cx)
+      let delta = angle - g.startAngle
+      if (ctx.shiftKey) {
+        delta =
+          Math.round(delta / (Math.PI / 4)) * (Math.PI / 4) -
+          (g.elements[0]?.startRotation ?? 0) +
+          (g.elements[0]?.startRotation ?? 0)
+        // Snap delta to 45°
+        delta =
+          Math.round((angle - g.startAngle) / (Math.PI / 4)) * (Math.PI / 4)
+      }
+      for (const { el, startRect: r, startRotation } of elements) {
+        if (el instanceof ArtboardElement) continue
+        // Rotate each element around group center
+        const elCx = r.x + r.w / 2
+        const elCy = r.y + r.h / 2
+        const dx = elCx - cx
+        const dy = elCy - cy
+        const c = Math.cos(delta)
+        const s = Math.sin(delta)
+        const rx = dx * c - dy * s
+        const ry = dx * s + dy * c
+        const newCx = cx + rx
+        const newCy = cy + ry
+        el.rotation = startRotation + delta
+        if (ctx.shiftKey) {
+          el.rotation = Math.round(el.rotation / (Math.PI / 4)) * (Math.PI / 4)
+        }
+        // Move element so its center is at newCx,newCy
+        const b = el.bounds
+        el.moveTo(newCx - b.width / 2, newCy - b.height / 2)
+        // For PathElement, need to rotate points around group center as well
+        if (el instanceof PathElement) {
+          const snap = g.elements.find((e) => e.el === el)?.pathSnapshot
+          if (snap) {
+            for (let i = 0; i < el.points.length; i++) {
+              const p = el.points[i]!
+              const sp = snap[i]!
+              // Rotate point around group center
+              const px = sp.x - cx
+              const py = sp.y - cy
+              const rx2 = px * c - py * s
+              const ry2 = px * s + py * c
+              p.x = cx + rx2
+              p.y = cy + ry2
+              if (sp.hIn) {
+                const hx = sp.hIn.x - cx
+                const hy = sp.hIn.y - cy
+                const rhx = hx * c - hy * s
+                const rhy = hx * s + hy * c
+                if (!p.hIn) p.hIn = { x: cx + rhx, y: cy + rhy }
+                else {
+                  p.hIn.x = cx + rhx
+                  p.hIn.y = cy + rhy
+                }
+              } else p.hIn = null
+              if (sp.hOut) {
+                const hx = sp.hOut.x - cx
+                const hy = sp.hOut.y - cy
+                const rhx = hx * c - hy * s
+                const rhy = hx * s + hy * c
+                if (!p.hOut) p.hOut = { x: cx + rhx, y: cy + rhy }
+                else {
+                  p.hOut.x = cx + rhx
+                  p.hOut.y = cy + rhy
+                }
+              } else p.hOut = null
+            }
+          }
+        }
+      }
+      ctx.requestRender()
+      return
+    }
+
+    // Scale as one
+    const w0 = startRect.w
+    const h0 = startRect.h
+    if (w0 === 0 || h0 === 0) return
+    const scx = startRect.x + w0 / 2
+    const scy = startRect.y + h0 / 2
+    const c = Math.cos(startRect.rotation)
+    const s = Math.sin(startRect.rotation)
+    const ux = c,
+      uy = s
+    const vx = -s,
+      vy = c
+    const aLocal = anchorLocalStart(g.handle, w0, h0)
+    const A = worldPointRect(startRect, aLocal.x, aLocal.y)
+    const dAx = ctx.point.x - A.x
+    const dAy = ctx.point.y - A.y
+    const du = dAx * ux + dAy * uy
+    const dv = dAx * vx + dAy * vy
+    const edges = handleEdges(g.handle)
+    const widthFree = edges.west || edges.east
+    const heightFree = edges.north || edges.south
+    const signX = edges.east ? 1 : edges.west ? -1 : 0
+    const signY = edges.south ? 1 : edges.north ? -1 : 0
+    const MIN = 4
+    let nw = widthFree ? signedClamp(signX * du, MIN) : w0
+    let nh = heightFree ? signedClamp(signY * dv, MIN) : h0
+    if (ctx.shiftKey && widthFree && heightFree) {
+      const f = Math.max(Math.abs(nw) / w0, Math.abs(nh) / h0)
+      const sw = nw < 0 ? -1 : 1
+      const sh = nh < 0 ? -1 : 1
+      nw = w0 * f * sw
+      nh = h0 * f * sh
+    }
+    if (ctx.altKey) {
+      const dCx = ctx.point.x - scx
+      const dCy = ctx.point.y - scy
+      const duC = dCx * ux + dCy * uy
+      const dvC = dCx * vx + dCy * vy
+      nw = widthFree ? signedClamp(2 * duC, MIN) : w0
+      nh = heightFree ? signedClamp(2 * dvC, MIN) : h0
+      if (ctx.shiftKey && widthFree && heightFree) {
+        const f = Math.max(Math.abs(2 * duC) / w0, Math.abs(2 * dvC) / h0)
+        nw = w0 * f * (nw < 0 ? -1 : 1)
+        nh = h0 * f * (nh < 0 ? -1 : 1)
+      }
+    }
+    nw = signedClamp(nw, MIN)
+    nh = signedClamp(nh, MIN)
+    const useNw = nw
+    const useNh = nh
+    let nx: number, ny: number
+    if (ctx.altKey) {
+      nx = scx - useNw / 2
+      ny = scy - useNh / 2
+    } else {
+      const anchorAx = edges.east ? -useNw / 2 : edges.west ? useNw / 2 : 0
+      const anchorAy = edges.south ? -useNh / 2 : edges.north ? useNh / 2 : 0
+      const cx = A.x - (anchorAx * c - anchorAy * s)
+      const cy = A.y - (anchorAx * s + anchorAy * c)
+      nx = cx - useNw / 2
+      ny = cy - useNh / 2
+    }
+    const newGroup: Rect = { x: nx, y: ny, w: useNw, h: useNh, rotation: 0 }
+    const sx = w0 === 0 ? 1 : useNw / w0
+    const sy = h0 === 0 ? 1 : useNh / h0
+
+    for (const { el, startRect: r, pathSnapshot } of elements) {
+      // Compute element's local position within group
+      const elCx = r.x + r.w / 2
+      const elCy = r.y + r.h / 2
+      // Local pos within group rect
+      const lp = localPointRect(startRect, { x: elCx, y: elCy })
+      const newElCx = worldPointRect(newGroup, lp.x * sx, lp.y * sy).x
+      const newElCy = worldPointRect(newGroup, lp.x * sx, lp.y * sy).y
+      // New element bounds
+      const newW = r.w * sx
+      const newH = r.h * sy
+      if (el instanceof ArtboardElement) {
+        el.x = newElCx - newW / 2
+        el.y = newElCy - newH / 2
+        el.width = newW
+        el.height = newH
+        continue
+      }
+      if (el instanceof ShapeElement || el instanceof ArtboardElement) {
+        el.x = newElCx - newW / 2
+        el.y = newElCy - newH / 2
+        ;(el as ShapeElement).width = newW
+        ;(el as ShapeElement).height = newH
+      } else if (el instanceof TextElement) {
+        const factor = newH / r.h
+        el.fontSize = Math.max(4, (el as TextElement).fontSize * factor)
+        el.x = newElCx - newW / 2
+        el.y = newElCy - newH / 2
+      } else if (el instanceof PathElement) {
+        // Scale points from group
+        const snap = pathSnapshot
+        if (!snap) continue
+        for (let i = 0; i < el.points.length; i++) {
+          const a = el.points[i]!
+          const s = snap[i]!
+          const lpp = localPointRect(startRect, { x: s.x, y: s.y })
+          const wpp = worldPointRect(newGroup, lpp.x * sx, lpp.y * sy)
+          a.x = wpp.x
+          a.y = wpp.y
+          if (s.hIn) {
+            const lpi = localPointRect(startRect, s.hIn)
+            const wpi = worldPointRect(newGroup, lpi.x * sx, lpi.y * sy)
+            if (!a.hIn) a.hIn = { x: wpi.x, y: wpi.y }
+            else {
+              a.hIn.x = wpi.x
+              a.hIn.y = wpi.y
+            }
+          } else a.hIn = null
+          if (s.hOut) {
+            const lpo = localPointRect(startRect, s.hOut)
+            const wpo = worldPointRect(newGroup, lpo.x * sx, lpo.y * sy)
+            if (!a.hOut) a.hOut = { x: wpo.x, y: wpo.y }
+            else {
+              a.hOut.x = wpo.x
+              a.hOut.y = wpo.y
+            }
+          } else a.hOut = null
+        }
+        // Update x/y to new center for moveTo semantics (path's x/y is not directly used for bounds, but for consistency)
+        const newB = el.bounds
+        el.moveTo(newB.x, newB.y)
+        // The points are already at world positions, moveTo will shift them, so we need to undo that shift
+        // Actually bounds is computed from points, and moveTo shifts points, so we should not call moveTo after scaling points
+        // Instead, we already set points to world positions, so we should set x/y to newB.x/y without shifting points
+        ;(el as unknown as { x: number }).x = newB.x
+        ;(el as unknown as { y: number }).y = newB.y
+      } else {
+        // Generic fallback: move and scale via x/y and width/height if any
+        const b = el.bounds
+        el.moveTo(newElCx - b.width / 2, newElCy - b.height / 2)
+        // Try to scale width/height if property exists
+        if ('width' in el && 'height' in el) {
+          ;(el as unknown as { width: number }).width = newW
+          ;(el as unknown as { height: number }).height = newH
+        }
+      }
+    }
+    ctx.requestRender()
+  }
+
   private updateHoverCursor(ctx: ToolContext): void {
     // Crossed-arrows (move) cursor whenever the pointer is over an artboard's
     // label/edge handle — its move affordance. If that exact artboard is the
@@ -536,6 +917,40 @@ export class SelectTool implements Tool {
       }
     }
     const selected = ctx.scene.selected
+    if (selected.length > 1) {
+      const gHit = this.hitGroupHandle(ctx)
+      if (gHit) {
+        switch (gHit) {
+          case 'rotate':
+            ctx.setCursor('grab')
+            break
+          case 'nw':
+          case 'se':
+            ctx.setCursor('nwse-resize')
+            break
+          case 'ne':
+          case 'sw':
+            ctx.setCursor('nesw-resize')
+            break
+          case 'n':
+          case 's':
+            ctx.setCursor('ns-resize')
+            break
+          default:
+            ctx.setCursor('ew-resize')
+        }
+        return
+      }
+      // Check if hovering over any selected element for move
+      for (const el of selected) {
+        if (el.hitTest(ctx.point, ctx.renderer.scale)) {
+          ctx.setCursor('move')
+          return
+        }
+      }
+      ctx.setCursor('default')
+      return
+    }
     if (selected.length !== 1 || selected[0]!.locked) {
       ctx.setCursor('default')
       return
@@ -569,6 +984,10 @@ export class SelectTool implements Tool {
   }
 
   onPointerUp(ctx: ToolContext): void {
+    if (this.groupTransform) {
+      this.groupTransform = null
+      return
+    }
     if (this.transform) {
       this.transform = null
       return

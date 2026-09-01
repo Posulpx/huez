@@ -304,6 +304,73 @@ export class CanvasRenderer {
   private drawSelectionOverlay(scene: Scene): void {
     const { ctx } = this
     ctx.save()
+    // Group transform: for 2+ selection, draw a single group bounding box
+    if (scene.selected.length > 1) {
+      const sel = scene.selected.filter((el) => el.visible)
+      // Skip if any is Path editing (handled per-element)
+      const hasEditingPath = sel.some(
+        (el) => el instanceof PathElement && (el as PathElement).editing
+      )
+      if (!hasEditingPath && sel.length > 1) {
+        let minX = Infinity,
+          minY = Infinity,
+          maxX = -Infinity,
+          maxY = -Infinity
+        for (const el of sel) {
+          const b = el.bounds
+          const x0 = Math.min(b.x, b.x + b.width)
+          const x1 = Math.max(b.x, b.x + b.width)
+          const y0 = Math.min(b.y, b.y + b.height)
+          const y1 = Math.max(b.y, b.y + b.height)
+          if (x0 < minX) minX = x0
+          if (y0 < minY) minY = y0
+          if (x1 > maxX) maxX = x1
+          if (y1 > maxY) maxY = y1
+        }
+        if (isFinite(minX)) {
+          const w = maxX - minX
+          const h = maxY - minY
+          ctx.lineWidth = 1
+          ctx.strokeStyle = '#4f8cff'
+          ctx.setLineDash([4, 4])
+          ctx.strokeRect(minX, minY, w, h)
+          ctx.setLineDash([])
+          // Group handles (8 scale + rotate)
+          const cx = minX + w / 2
+          const cy = minY + h / 2
+          const handlePos = [
+            { x: minX, y: minY },
+            { x: cx, y: minY },
+            { x: maxX, y: minY },
+            { x: maxX, y: cy },
+            { x: maxX, y: maxY },
+            { x: cx, y: maxY },
+            { x: minX, y: maxY },
+            { x: minX, y: cy },
+          ]
+          for (const p of handlePos) {
+            ctx.fillStyle = '#ffffff'
+            ctx.strokeStyle = '#4f8cff'
+            ctx.lineWidth = 1.5
+            ctx.fillRect(p.x - 4, p.y - 4, 8, 8)
+            ctx.strokeRect(p.x - 4, p.y - 4, 8, 8)
+          }
+          // Rotate handle
+          const rh = { x: cx, y: minY - 28 }
+          ctx.beginPath()
+          ctx.moveTo(cx, minY)
+          ctx.lineTo(rh.x, rh.y)
+          ctx.strokeStyle = '#4f8cff'
+          ctx.stroke()
+          ctx.beginPath()
+          ctx.fillStyle = '#4f8cff'
+          ctx.arc(rh.x, rh.y, 6, 0, Math.PI * 2)
+          ctx.fill()
+        }
+        ctx.restore()
+        return
+      }
+    }
     for (const el of scene.selected) {
       if (!el.visible) continue
       // In edit mode the text's bounding box is hidden and the caret must not

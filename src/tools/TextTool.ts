@@ -18,6 +18,7 @@ export class TextTool implements Tool {
   constructor(private editor?: TextEditor) {}
 
   onPointerDown(ctx: ToolContext): void {
+    ctx.history?.push()
     const el = new TextElement(ctx.point.x, ctx.point.y, { text: 'Text' })
     // Auto-assign to the artboard under the creation point, if any.
     const ab = ctx.scene.artboardAtPoint(ctx.point)

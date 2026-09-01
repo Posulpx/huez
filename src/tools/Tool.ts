@@ -19,6 +19,10 @@ export interface ToolContext {
   altKey: boolean
   /** Ctrl/Cmd held — used for opposite-side curve construction. */
   ctrlKey: boolean
+  /** History for undo/redo (optional, provided by App). */
+  history?: import('../engine/history').History
+  /** Clipboard for copy/paste (optional, provided by App). */
+  clipboard?: import('../engine/clipboard').Clipboard
   /** Request a repaint — tools call this after mutating the scene. */
   requestRender(): void
   /** Update the canvas cursor (used for hover/transform affordances). */

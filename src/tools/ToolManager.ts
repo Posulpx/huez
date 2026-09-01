@@ -27,7 +27,9 @@ export class ToolManager {
   constructor(
     private scene: ToolContext['scene'],
     private renderer: ToolContext['renderer'],
-    private requestRender: () => void
+    private requestRender: () => void,
+    private history?: import('../engine/history').History,
+    private clipboard?: import('../engine/clipboard').Clipboard
   ) {}
 
   /** Register a tool module (logged as created into the manager). */
@@ -95,6 +97,8 @@ export class ToolManager {
       shiftKey,
       altKey,
       ctrlKey,
+      history: this.history,
+      clipboard: this.clipboard,
       requestRender: this.requestRender,
       setCursor: (cursor: string) => this.renderer.setCursor(cursor),
     }

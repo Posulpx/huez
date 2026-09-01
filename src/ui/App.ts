@@ -13,6 +13,8 @@ import { PropertiesPanel } from './PropertiesPanel'
 import { LayerPanel } from './LayerPanel'
 import { ActivityPanel } from './ActivityPanel'
 import { TextEditor } from './TextEditor'
+import { History } from '../engine/history'
+import { Clipboard } from '../engine/clipboard'
 import { TextElement } from '../elements/TextElement'
 import { PathEditor } from './PathEditor'
 import { PathElement } from '../elements/PathElement'
@@ -28,6 +30,8 @@ export class App {
   private tools: ToolManager
   private textEditor: TextEditor
   private pathEditor: PathEditor
+  private history: History
+  private clipboard: Clipboard
   private panning = false
   private panLast: { x: number; y: number } | null = null
 
@@ -38,8 +42,16 @@ export class App {
     propsRoot: HTMLElement,
     activityRoot: HTMLElement
   ) {
+    this.history = new History(this.scene)
+    this.clipboard = new Clipboard()
     this.renderer = new CanvasRenderer(canvas)
-    this.tools = new ToolManager(this.scene, this.renderer, () => this.render())
+    this.tools = new ToolManager(
+      this.scene,
+      this.renderer,
+      () => this.render(),
+      this.history,
+      this.clipboard
+    )
     const stage = canvas.parentElement as HTMLElement
     this.textEditor = new TextEditor(stage, this.scene, this.renderer, () =>
       this.render()
@@ -55,6 +67,7 @@ export class App {
     const a4 = new ArtboardElement(120, 120, 794, 1123)
     a4.name = 'Artboard 1'
     this.scene.add(a4)
+    this.history.push()
 
     new ToolPalette(
       paletteRoot,
@@ -68,10 +81,16 @@ export class App {
       },
       'select',
       this.scene,
-      () => this.render()
+      () => this.render(),
+      this.history
     )
     new LayerPanel(layersRoot, this.scene, () => this.render())
-    new PropertiesPanel(propsRoot, this.scene, () => this.render())
+    new PropertiesPanel(
+      propsRoot,
+      this.scene,
+      () => this.render(),
+      this.history
+    )
     new ActivityPanel(activityRoot)
 
     this.scene.subscribe(() => this.render())
@@ -273,7 +292,7 @@ export class App {
       { passive: false }
     )
 
-    // Keyboard: path editor first, then forward to the active tool (e.g. Pen tool Enter/Escape).
+    // Keyboard: path editor first, then global shortcuts (undo/redo/copy/paste/delete), then tool
     window.addEventListener('keydown', (e) => {
       const t = e.target as HTMLElement | null
       if (
@@ -290,6 +309,59 @@ export class App {
           this.render()
           return
         }
+      }
+      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0
+      const mod = isMac ? e.metaKey : e.ctrlKey
+      // Undo: Ctrl/Cmd+Z
+      if (mod && e.key.toLowerCase() === 'z' && !e.shiftKey) {
+        e.preventDefault()
+        if (this.history.canUndo()) {
+          this.history.undo()
+          this.render()
+        }
+        return
+      }
+      // Redo: Ctrl/Cmd+Y or Ctrl/Cmd+Shift+Z
+      if (
+        (mod && e.key.toLowerCase() === 'y') ||
+        (mod && e.shiftKey && e.key.toLowerCase() === 'z')
+      ) {
+        e.preventDefault()
+        if (this.history.canRedo()) {
+          this.history.redo()
+          this.render()
+        }
+        return
+      }
+      // Copy: Ctrl/Cmd+C
+      if (mod && e.key.toLowerCase() === 'c') {
+        e.preventDefault()
+        if (this.scene.selected.length > 0) {
+          this.clipboard.copy(this.scene)
+        }
+        return
+      }
+      // Paste: Ctrl/Cmd+V
+      if (mod && e.key.toLowerCase() === 'v') {
+        e.preventDefault()
+        if (this.clipboard.hasData()) {
+          this.history.push()
+          this.clipboard.paste(this.scene)
+          this.render()
+        }
+        return
+      }
+      // Delete: Delete or Backspace
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (this.scene.selected.length > 0) {
+          e.preventDefault()
+          this.history.push()
+          for (const el of [...this.scene.selected]) {
+            this.scene.remove(el)
+          }
+          this.render()
+        }
+        return
       }
       this.tools.keyDown(e.key)
     })
