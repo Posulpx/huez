@@ -85,6 +85,7 @@ export class SelectTool implements Tool {
     }[]
   } | null = null
   private groupPreviewRetained = false
+  private lastSelectionIds = ''
   private moved = false
   private clonedThisDrag = false
   private marquee: { x0: number; y0: number; x1: number; y1: number } | null =
@@ -116,8 +117,12 @@ export class SelectTool implements Tool {
   }
 
   onPointerDown(ctx: ToolContext): void {
-    // Clear retained group preview on new selection (redraw group bounds only on new selection)
-    if (this.groupPreviewRetained) {
+    // Retain original group bounds until new selection is made
+    const currentSelIds = ctx.scene.selected
+      .map((el) => el.id)
+      .sort()
+      .join(',')
+    if (this.groupPreviewRetained && currentSelIds !== this.lastSelectionIds) {
       this.groupPreview = null
       this.groupPreviewRetained = false
       ;(
@@ -126,6 +131,7 @@ export class SelectTool implements Tool {
         }
       ).setGroupPreview(null, 0)
     }
+    this.lastSelectionIds = currentSelIds
     this.moved = false
     const selected = ctx.scene.selected
 
