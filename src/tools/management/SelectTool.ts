@@ -327,13 +327,17 @@ export class SelectTool implements Tool {
   private groupRect(scene: ToolContext['scene']): Rect | null {
     const sel = scene.selected
     if (sel.length === 0) return null
+    // Compute ink-based bounds; for group, also compute average rotation to follow transform
     let minX = Infinity,
       minY = Infinity,
       maxX = -Infinity,
       maxY = -Infinity
+    let sumRot = 0
+    let rotCount = 0
     for (const el of sel) {
       const b = el.bounds
-      // For Path/Text, use flattened ink directly (already tight, not corners double-count)
+      sumRot += el.rotation
+      rotCount++
       if (el instanceof PathElement || el instanceof TextElement) {
         const flat = (
           el as unknown as {
@@ -362,7 +366,6 @@ export class SelectTool implements Tool {
           continue
         }
       }
-      // For Shape/Artboard: use world corners with rotation
       const corners = [
         { x: b.x, y: b.y },
         { x: b.x + b.width, y: b.y },
@@ -389,7 +392,15 @@ export class SelectTool implements Tool {
       }
     }
     if (!isFinite(minX)) return null
-    return { x: minX, y: minY, w: maxX - minX, h: maxY - minY, rotation: 0 }
+    const avgRot = rotCount > 0 ? sumRot / rotCount : 0
+    // Retain rotation until release: group bounds follows rotation (not axis-aligned)
+    return {
+      x: minX,
+      y: minY,
+      w: maxX - minX,
+      h: maxY - minY,
+      rotation: avgRot,
+    }
   }
 
   private hitGroupHandle(ctx: ToolContext): HandleId | null {
