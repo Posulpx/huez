@@ -26,10 +26,15 @@ export class CanvasRenderer {
   private penActive = false
   private penHover: { pathId: string; index: number } | null = null
 
-  /** Group rotation preview — original bounds + angle, drawn until release. */
+  /** Group rotation preview — original bounds + angle + elements for complete preview, drawn until release. */
   private groupPreview: {
     rect: { x: number; y: number; w: number; h: number }
     angle: number
+    elements?: {
+      el: import('./BaseElement').BaseElement
+      startRect: import('./TransformHandles').Rect
+      startRotation: number
+    }[]
   } | null = null
 
   private static readonly MIN_SCALE = 0.1
@@ -134,6 +139,12 @@ export class CanvasRenderer {
       }
     }
 
+    // Hide original group elements during rotation preview to avoid origin trace
+    const previewIds = new Set(
+      this.groupPreview?.elements?.map((e) => e.el.id) ?? []
+    )
+    const isPreviewing = !!this.groupPreview
+
     for (const ab of scene.artboards) {
       if (!ab.visible) continue
       ab.draw(ctx)
@@ -146,7 +157,10 @@ export class CanvasRenderer {
         ctx.rect(ax, ay, Math.abs(ab.width), Math.abs(ab.height))
         ctx.clip()
         for (const child of kids) {
-          if (child.visible) child.draw(ctx)
+          if (child.visible) {
+            if (isPreviewing && previewIds.has(child.id)) continue
+            child.draw(ctx)
+          }
         }
         ctx.restore()
       }
@@ -162,7 +176,10 @@ export class CanvasRenderer {
         scene.getElementById(el.artboardId) instanceof ArtboardElement
       )
         continue
-      if (el.visible) el.draw(ctx)
+      if (el.visible) {
+        if (isPreviewing && previewIds.has(el.id)) continue
+        el.draw(ctx)
+      }
     }
 
     // Active artboard highlight — subtle outline for the last interacted artboard
@@ -198,9 +215,14 @@ export class CanvasRenderer {
 
   setGroupPreview(
     rect: { x: number; y: number; w: number; h: number } | null,
-    angle: number
+    angle: number,
+    elements?: {
+      el: import('./BaseElement').BaseElement
+      startRect: import('./TransformHandles').Rect
+      startRotation: number
+    }[]
   ): void {
-    this.groupPreview = rect ? { rect, angle } : null
+    this.groupPreview = rect ? { rect, angle, elements } : null
   }
 
   private drawMarquee(): void {
@@ -299,20 +321,47 @@ export class CanvasRenderer {
     if (!gp) return
     const { ctx } = this
     ctx.save()
-    const { rect, angle } = gp
+    const { rect, angle, elements } = gp
     const cx = rect.x + rect.w / 2
     const cy = rect.y + rect.h / 2
+
+    // Draw original bounds as solid faint reference (retained until new selection)
+    ctx.save()
     ctx.translate(cx, cy)
     ctx.rotate(angle)
     ctx.translate(-cx, -cy)
     ctx.lineWidth = 1 / this.scale
-    ctx.strokeStyle = 'rgba(120, 220, 255, 0.9)'
-    ctx.setLineDash([6 / this.scale, 3 / this.scale])
+    ctx.strokeStyle = 'rgba(120, 220, 255, 0.25)'
     ctx.strokeRect(rect.x, rect.y, rect.w, rect.h)
-    ctx.setLineDash([])
-    // Original bounds corners for reference
-    ctx.fillStyle = 'rgba(120, 220, 255, 0.15)'
-    ctx.fillRect(rect.x, rect.y, rect.w, rect.h)
+    ctx.restore()
+
+    // Draw complete preview of each element rotated around group center
+    // Do not leave origin trace: original elements are hidden during preview
+    // (handled via Scene's group preview flag), only preview is visible
+    if (elements && elements.length > 0) {
+      for (const { el, startRect: r, startRotation } of elements) {
+        const elCx = r.x + r.w / 2
+        const elCy = r.y + r.h / 2
+        const dx = elCx - cx
+        const dy = elCy - cy
+        const c = Math.cos(angle)
+        const s = Math.sin(angle)
+        const rx = dx * c - dy * s
+        const ry = dx * s + dy * c
+        const newCx = cx + rx
+        const newCy = cy + ry
+        const newRotation = startRotation + angle
+
+        ctx.save()
+        ctx.globalAlpha = 0.85
+        const previewEl = el.clone()
+        const pb = previewEl.bounds
+        previewEl.moveTo(newCx - pb.width / 2, newCy - pb.height / 2)
+        previewEl.rotation = newRotation
+        previewEl.draw(ctx)
+        ctx.restore()
+      }
+    }
     ctx.restore()
   }
 

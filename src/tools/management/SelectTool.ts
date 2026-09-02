@@ -69,7 +69,22 @@ export class SelectTool implements Tool {
   private origins = new Map<string, Point>()
   private transform: TransformState | null = null
   private groupTransform: GroupTransformState | null = null
-  private groupPreview: { rect: Rect; angle: number } | null = null
+  private groupPreview: {
+    rect: Rect
+    angle: number
+    elements: {
+      el: BaseElement
+      startRect: Rect
+      startRotation: number
+      pathSnapshot?: {
+        x: number
+        y: number
+        hIn: { x: number; y: number } | null
+        hOut: { x: number; y: number } | null
+      }[]
+    }[]
+  } | null = null
+  private groupPreviewRetained = false
   private moved = false
   private clonedThisDrag = false
   private marquee: { x0: number; y0: number; x1: number; y1: number } | null =
@@ -101,6 +116,16 @@ export class SelectTool implements Tool {
   }
 
   onPointerDown(ctx: ToolContext): void {
+    // Clear retained group preview on new selection (redraw group bounds only on new selection)
+    if (this.groupPreviewRetained) {
+      this.groupPreview = null
+      this.groupPreviewRetained = false
+      ;(
+        ctx.renderer as unknown as {
+          setGroupPreview: (r: unknown, a: number) => void
+        }
+      ).setGroupPreview(null, 0)
+    }
     this.moved = false
     const selected = ctx.scene.selected
 
@@ -742,14 +767,25 @@ export class SelectTool implements Tool {
         delta =
           Math.round((angle - g.startAngle) / (Math.PI / 4)) * (Math.PI / 4)
       }
-      // Preview only — store original bounds + delta, redraw on release
-      this.groupPreview = { rect: { ...startRect }, angle: delta }
-      // Update renderer preview
+      // Preview only — store original bounds + delta + elements for complete preview, redraw on release
+      this.groupPreview = {
+        rect: { ...startRect },
+        angle: delta,
+        elements: g.elements.map((e) => ({ ...e })),
+      }
       ;(
         ctx.renderer as unknown as {
-          setGroupPreview: (r: Rect | null, angle: number) => void
+          setGroupPreview: (
+            r: Rect | null,
+            angle: number,
+            els?: {
+              el: BaseElement
+              startRect: Rect
+              startRotation: number
+            }[]
+          ) => void
         }
-      ).setGroupPreview(startRect, delta)
+      ).setGroupPreview(startRect, delta, g.elements)
       ctx.requestRender()
       return
     }
@@ -977,13 +1013,14 @@ export class SelectTool implements Tool {
 
   onPointerUp(ctx: ToolContext): void {
     if (this.groupTransform) {
-      // For rotate preview, apply actual transform now with final angle
-      if (this.groupTransform.mode === 'rotate' && this.groupPreview) {
+      const isRotatePreview =
+        this.groupTransform.mode === 'rotate' && this.groupPreview
+      if (isRotatePreview) {
         const g = this.groupTransform
         const startRect = g.startRect
         const cx = startRect.x + startRect.w / 2
         const cy = startRect.y + startRect.h / 2
-        const delta = this.groupPreview.angle
+        const delta = this.groupPreview!.angle
         ctx.history?.push()
         for (const { el, startRect: r, startRotation } of g.elements) {
           if (el instanceof ArtboardElement) continue
@@ -1005,9 +1042,15 @@ export class SelectTool implements Tool {
           const b = el.bounds
           el.moveTo(newCx - b.width / 2, newCy - b.height / 2)
         }
+        // Retain original group bounds until new selection (don't clear preview immediately)
+        this.groupPreviewRetained = true
+        this.groupTransform = null
+        ctx.requestRender()
+        return
       }
-      // Clear preview
+      // For scale or non-rotate, clear preview and transform already applied live
       this.groupPreview = null
+      this.groupPreviewRetained = false
       ;(
         ctx.renderer as unknown as {
           setGroupPreview: (r: unknown, a: number) => void
