@@ -425,10 +425,11 @@ export class SelectTool implements Tool {
         return { id: h.id, x: dx + cx, y: dy + cy }
       })
     })()
+    const hitR = 8 / (ctx.renderer.scale || 1)
     for (const h of pts) {
       const dx = ctx.point.x - h.x
       const dy = ctx.point.y - h.y
-      if (dx * dx + dy * dy <= 8 * 8) return h.id
+      if (dx * dx + dy * dy <= hitR * hitR) return h.id
     }
     return null
   }

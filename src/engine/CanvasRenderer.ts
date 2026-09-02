@@ -431,24 +431,75 @@ export class CanvasRenderer {
           maxY = -Infinity
         for (const el of sel) {
           const b = el.bounds
-          const x0 = Math.min(b.x, b.x + b.width)
-          const x1 = Math.max(b.x, b.x + b.width)
-          const y0 = Math.min(b.y, b.y + b.height)
-          const y1 = Math.max(b.y, b.y + b.height)
-          if (x0 < minX) minX = x0
-          if (y0 < minY) minY = y0
-          if (x1 > maxX) maxX = x1
-          if (y1 > maxY) maxY = y1
+          // Ink-correct for rotated/Path/Text
+          if (
+            (el instanceof PathElement || el instanceof TextElement) &&
+            (
+              el as unknown as {
+                flatten?: (s?: number) => { x: number; y: number }[]
+              }
+            ).flatten
+          ) {
+            const flat = (
+              el as unknown as {
+                flatten: (s?: number) => { x: number; y: number }[]
+              }
+            ).flatten(8)
+            for (const p of flat) {
+              let x = p.x
+              let y = p.y
+              if (el.rotation) {
+                const c = Math.cos(el.rotation)
+                const s = Math.sin(el.rotation)
+                const cx = b.x + b.width / 2
+                const cy = b.y + b.height / 2
+                const dx = p.x - cx
+                const dy = p.y - cy
+                x = dx * c - dy * s + cx
+                y = dx * s + dy * c + cy
+              }
+              if (x < minX) minX = x
+              if (y < minY) minY = y
+              if (x > maxX) maxX = x
+              if (y > maxY) maxY = y
+            }
+            continue
+          }
+          const corners = [
+            { x: b.x, y: b.y },
+            { x: b.x + b.width, y: b.y },
+            { x: b.x + b.width, y: b.y + b.height },
+            { x: b.x, y: b.y + b.height },
+          ]
+          const cx = b.x + b.width / 2
+          const cy = b.y + b.height / 2
+          for (const pt of corners) {
+            let x = pt.x
+            let y = pt.y
+            if (el.rotation) {
+              const c = Math.cos(el.rotation)
+              const s = Math.sin(el.rotation)
+              const dx = pt.x - cx
+              const dy = pt.y - cy
+              x = dx * c - dy * s + cx
+              y = dx * s + dy * c + cy
+            }
+            if (x < minX) minX = x
+            if (y < minY) minY = y
+            if (x > maxX) maxX = x
+            if (y > maxY) maxY = y
+          }
         }
         if (isFinite(minX)) {
           const w = maxX - minX
           const h = maxY - minY
-          ctx.lineWidth = 1
+          // Use ink-correct group rect for handles (already computed via rotated corners + flatten)
+          ctx.lineWidth = 1 / this.scale
           ctx.strokeStyle = '#4f8cff'
-          ctx.setLineDash([4, 4])
+          ctx.setLineDash([4 / this.scale, 4 / this.scale])
           ctx.strokeRect(minX, minY, w, h)
           ctx.setLineDash([])
-          // Group handles (8 scale + rotate)
+          // Group handles (8 scale + rotate) — scale-aware and ink-based
           const cx = minX + w / 2
           const cy = minY + h / 2
           const handlePos = [
@@ -461,23 +512,25 @@ export class CanvasRenderer {
             { x: minX, y: maxY },
             { x: minX, y: cy },
           ]
+          const hs = 4 / this.scale
           for (const p of handlePos) {
             ctx.fillStyle = '#ffffff'
             ctx.strokeStyle = '#4f8cff'
-            ctx.lineWidth = 1.5
-            ctx.fillRect(p.x - 4, p.y - 4, 8, 8)
-            ctx.strokeRect(p.x - 4, p.y - 4, 8, 8)
+            ctx.lineWidth = 1.5 / this.scale
+            ctx.fillRect(p.x - hs, p.y - hs, hs * 2, hs * 2)
+            ctx.strokeRect(p.x - hs, p.y - hs, hs * 2, hs * 2)
           }
           // Rotate handle
-          const rh = { x: cx, y: minY - 28 }
+          const rh = { x: cx, y: minY - 28 / this.scale }
           ctx.beginPath()
           ctx.moveTo(cx, minY)
           ctx.lineTo(rh.x, rh.y)
           ctx.strokeStyle = '#4f8cff'
+          ctx.lineWidth = 1 / this.scale
           ctx.stroke()
           ctx.beginPath()
           ctx.fillStyle = '#4f8cff'
-          ctx.arc(rh.x, rh.y, 6, 0, Math.PI * 2)
+          ctx.arc(rh.x, rh.y, 6 / this.scale, 0, Math.PI * 2)
           ctx.fill()
         }
         ctx.restore()
