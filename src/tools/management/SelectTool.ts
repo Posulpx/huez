@@ -332,8 +332,37 @@ export class SelectTool implements Tool {
       maxX = -Infinity,
       maxY = -Infinity
     for (const el of sel) {
-      // Use ink coverage: for rotated elements, compute world corners
       const b = el.bounds
+      // For Path/Text, use flattened ink directly (already tight, not corners double-count)
+      if (el instanceof PathElement || el instanceof TextElement) {
+        const flat = (
+          el as unknown as {
+            flatten?: (steps?: number) => { x: number; y: number }[]
+          }
+        ).flatten?.(8) as { x: number; y: number }[] | undefined
+        if (flat && flat.length > 0) {
+          for (const p of flat) {
+            let x = p.x
+            let y = p.y
+            if (el.rotation) {
+              const c = Math.cos(el.rotation)
+              const s = Math.sin(el.rotation)
+              const cx = b.x + b.width / 2
+              const cy = b.y + b.height / 2
+              const dx = p.x - cx
+              const dy = p.y - cy
+              x = dx * c - dy * s + cx
+              y = dx * s + dy * c + cy
+            }
+            if (x < minX) minX = x
+            if (y < minY) minY = y
+            if (x > maxX) maxX = x
+            if (y > maxY) maxY = y
+          }
+          continue
+        }
+      }
+      // For Shape/Artboard: use world corners with rotation
       const corners = [
         { x: b.x, y: b.y },
         { x: b.x + b.width, y: b.y },
@@ -353,37 +382,10 @@ export class SelectTool implements Tool {
           x = dx * c - dy * s + cx
           y = dx * s + dy * c + cy
         }
-        // For PathElement, also consider flattened ink points for tighter bounds
         if (x < minX) minX = x
         if (y < minY) minY = y
         if (x > maxX) maxX = x
         if (y > maxY) maxY = y
-      }
-      // For Path/Text with tight ink, also sample flatten for more accurate ink
-      if (el instanceof PathElement || el instanceof TextElement) {
-        const flat = (
-          el as unknown as {
-            flatten?: (steps?: number) => { x: number; y: number }[]
-          }
-        ).flatten?.(8) as { x: number; y: number }[] | undefined
-        if (flat) {
-          for (const p of flat) {
-            let x = p.x
-            let y = p.y
-            if (el.rotation) {
-              const c = Math.cos(el.rotation)
-              const s = Math.sin(el.rotation)
-              const dx = p.x - (b.x + b.width / 2)
-              const dy = p.y - (b.y + b.height / 2)
-              x = dx * c - dy * s + (b.x + b.width / 2)
-              y = dx * s + dy * c + (b.y + b.height / 2)
-            }
-            if (x < minX) minX = x
-            if (y < minY) minY = y
-            if (x > maxX) maxX = x
-            if (y > maxY) maxY = y
-          }
-        }
       }
     }
     if (!isFinite(minX)) return null
@@ -432,7 +434,18 @@ export class SelectTool implements Tool {
   }
 
   private beginGroupTransform(ctx: ToolContext, handle: HandleId): void {
-    ctx.history?.push()
+    // Clear retained preview from previous transform (redraw only on new selection, but new transform should start fresh)
+    if (this.groupPreviewRetained) {
+      this.groupPreview = null
+      this.groupPreviewRetained = false
+      ;(
+        ctx.renderer as unknown as {
+          setGroupPreview: (r: unknown, a: number) => void
+        }
+      ).setGroupPreview(null, 0)
+    }
+    // For rotate preview, don't push yet (push on commit), for scale push now (live)
+    if (handle !== 'rotate') ctx.history?.push()
     const g = this.groupRect(ctx.scene)
     if (!g) return
     const startAngle =
