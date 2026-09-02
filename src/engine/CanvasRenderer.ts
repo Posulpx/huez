@@ -26,6 +26,12 @@ export class CanvasRenderer {
   private penActive = false
   private penHover: { pathId: string; index: number } | null = null
 
+  /** Group rotation preview — original bounds + angle, drawn until release. */
+  private groupPreview: {
+    rect: { x: number; y: number; w: number; h: number }
+    angle: number
+  } | null = null
+
   private static readonly MIN_SCALE = 0.1
   private static readonly MAX_SCALE = 8
 
@@ -168,6 +174,9 @@ export class CanvasRenderer {
     // Pen node awareness — show open endpoints where pen can continue.
     if (this.penActive) this.drawPenNodeAwareness(scene)
 
+    // Group rotation preview — original bounds rotated, until release
+    if (this.groupPreview) this.drawGroupPreview()
+
     // Rubber-band (marquee) selection rectangle, drawn above everything.
     if (this.marquee) this.drawMarquee()
   }
@@ -185,6 +194,13 @@ export class CanvasRenderer {
 
   setPenHover(hover: { pathId: string; index: number } | null): void {
     this.penHover = hover
+  }
+
+  setGroupPreview(
+    rect: { x: number; y: number; w: number; h: number } | null,
+    angle: number
+  ): void {
+    this.groupPreview = rect ? { rect, angle } : null
   }
 
   private drawMarquee(): void {
@@ -275,6 +291,28 @@ export class CanvasRenderer {
         }
       }
     }
+    ctx.restore()
+  }
+
+  private drawGroupPreview(): void {
+    const gp = this.groupPreview
+    if (!gp) return
+    const { ctx } = this
+    ctx.save()
+    const { rect, angle } = gp
+    const cx = rect.x + rect.w / 2
+    const cy = rect.y + rect.h / 2
+    ctx.translate(cx, cy)
+    ctx.rotate(angle)
+    ctx.translate(-cx, -cy)
+    ctx.lineWidth = 1 / this.scale
+    ctx.strokeStyle = 'rgba(120, 220, 255, 0.9)'
+    ctx.setLineDash([6 / this.scale, 3 / this.scale])
+    ctx.strokeRect(rect.x, rect.y, rect.w, rect.h)
+    ctx.setLineDash([])
+    // Original bounds corners for reference
+    ctx.fillStyle = 'rgba(120, 220, 255, 0.15)'
+    ctx.fillRect(rect.x, rect.y, rect.w, rect.h)
     ctx.restore()
   }
 

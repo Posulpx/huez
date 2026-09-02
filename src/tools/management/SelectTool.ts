@@ -69,6 +69,7 @@ export class SelectTool implements Tool {
   private origins = new Map<string, Point>()
   private transform: TransformState | null = null
   private groupTransform: GroupTransformState | null = null
+  private groupPreview: { rect: Rect; angle: number } | null = null
   private moved = false
   private clonedThisDrag = false
   private marquee: { x0: number; y0: number; x1: number; y1: number } | null =
@@ -300,15 +301,59 @@ export class SelectTool implements Tool {
       maxX = -Infinity,
       maxY = -Infinity
     for (const el of sel) {
+      // Use ink coverage: for rotated elements, compute world corners
       const b = el.bounds
-      const x0 = Math.min(b.x, b.x + b.width)
-      const x1 = Math.max(b.x, b.x + b.width)
-      const y0 = Math.min(b.y, b.y + b.height)
-      const y1 = Math.max(b.y, b.y + b.height)
-      if (x0 < minX) minX = x0
-      if (y0 < minY) minY = y0
-      if (x1 > maxX) maxX = x1
-      if (y1 > maxY) maxY = y1
+      const corners = [
+        { x: b.x, y: b.y },
+        { x: b.x + b.width, y: b.y },
+        { x: b.x + b.width, y: b.y + b.height },
+        { x: b.x, y: b.y + b.height },
+      ]
+      const cx = b.x + b.width / 2
+      const cy = b.y + b.height / 2
+      for (const pt of corners) {
+        let x = pt.x
+        let y = pt.y
+        if (el.rotation) {
+          const c = Math.cos(el.rotation)
+          const s = Math.sin(el.rotation)
+          const dx = pt.x - cx
+          const dy = pt.y - cy
+          x = dx * c - dy * s + cx
+          y = dx * s + dy * c + cy
+        }
+        // For PathElement, also consider flattened ink points for tighter bounds
+        if (x < minX) minX = x
+        if (y < minY) minY = y
+        if (x > maxX) maxX = x
+        if (y > maxY) maxY = y
+      }
+      // For Path/Text with tight ink, also sample flatten for more accurate ink
+      if (el instanceof PathElement || el instanceof TextElement) {
+        const flat = (
+          el as unknown as {
+            flatten?: (steps?: number) => { x: number; y: number }[]
+          }
+        ).flatten?.(8) as { x: number; y: number }[] | undefined
+        if (flat) {
+          for (const p of flat) {
+            let x = p.x
+            let y = p.y
+            if (el.rotation) {
+              const c = Math.cos(el.rotation)
+              const s = Math.sin(el.rotation)
+              const dx = p.x - (b.x + b.width / 2)
+              const dy = p.y - (b.y + b.height / 2)
+              x = dx * c - dy * s + (b.x + b.width / 2)
+              y = dx * s + dy * c + (b.y + b.height / 2)
+            }
+            if (x < minX) minX = x
+            if (y < minY) minY = y
+            if (x > maxX) maxX = x
+            if (y > maxY) maxY = y
+          }
+        }
+      }
     }
     if (!isFinite(minX)) return null
     return { x: minX, y: minY, w: maxX - minX, h: maxY - minY, rotation: 0 }
@@ -695,34 +740,16 @@ export class SelectTool implements Tool {
       let delta = angle - g.startAngle
       if (ctx.shiftKey) {
         delta =
-          Math.round(delta / (Math.PI / 4)) * (Math.PI / 4) -
-          (g.elements[0]?.startRotation ?? 0) +
-          (g.elements[0]?.startRotation ?? 0)
-        // Snap delta to 45°
-        delta =
           Math.round((angle - g.startAngle) / (Math.PI / 4)) * (Math.PI / 4)
       }
-      for (const { el, startRect: r, startRotation } of elements) {
-        if (el instanceof ArtboardElement) continue
-        // Rotate each element around group center
-        const elCx = r.x + r.w / 2
-        const elCy = r.y + r.h / 2
-        const dx = elCx - cx
-        const dy = elCy - cy
-        const c = Math.cos(delta)
-        const s = Math.sin(delta)
-        const rx = dx * c - dy * s
-        const ry = dx * s + dy * c
-        const newCx = cx + rx
-        const newCy = cy + ry
-        el.rotation = startRotation + delta
-        if (ctx.shiftKey) {
-          el.rotation = Math.round(el.rotation / (Math.PI / 4)) * (Math.PI / 4)
+      // Preview only — store original bounds + delta, redraw on release
+      this.groupPreview = { rect: { ...startRect }, angle: delta }
+      // Update renderer preview
+      ;(
+        ctx.renderer as unknown as {
+          setGroupPreview: (r: Rect | null, angle: number) => void
         }
-        // Move element so its center is at newCx,newCy — for PathElement, moveTo will shift points correctly
-        const b = el.bounds
-        el.moveTo(newCx - b.width / 2, newCy - b.height / 2)
-      }
+      ).setGroupPreview(startRect, delta)
       ctx.requestRender()
       return
     }
@@ -950,7 +977,44 @@ export class SelectTool implements Tool {
 
   onPointerUp(ctx: ToolContext): void {
     if (this.groupTransform) {
+      // For rotate preview, apply actual transform now with final angle
+      if (this.groupTransform.mode === 'rotate' && this.groupPreview) {
+        const g = this.groupTransform
+        const startRect = g.startRect
+        const cx = startRect.x + startRect.w / 2
+        const cy = startRect.y + startRect.h / 2
+        const delta = this.groupPreview.angle
+        ctx.history?.push()
+        for (const { el, startRect: r, startRotation } of g.elements) {
+          if (el instanceof ArtboardElement) continue
+          const elCx = r.x + r.w / 2
+          const elCy = r.y + r.h / 2
+          const dx = elCx - cx
+          const dy = elCy - cy
+          const c = Math.cos(delta)
+          const s = Math.sin(delta)
+          const rx = dx * c - dy * s
+          const ry = dx * s + dy * c
+          const newCx = cx + rx
+          const newCy = cy + ry
+          el.rotation = startRotation + delta
+          if (ctx.shiftKey) {
+            el.rotation =
+              Math.round(el.rotation / (Math.PI / 4)) * (Math.PI / 4)
+          }
+          const b = el.bounds
+          el.moveTo(newCx - b.width / 2, newCy - b.height / 2)
+        }
+      }
+      // Clear preview
+      this.groupPreview = null
+      ;(
+        ctx.renderer as unknown as {
+          setGroupPreview: (r: unknown, a: number) => void
+        }
+      ).setGroupPreview(null, 0)
       this.groupTransform = null
+      ctx.requestRender()
       return
     }
     if (this.transform) {
